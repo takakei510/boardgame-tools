@@ -6,20 +6,20 @@ import Link from "next/link";
 
 export default function WordocchiPage() {
   const [currentTopic, setCurrentTopic] = useState(wordocchiTopics[0]);
+  const [history, setHistory] = useState<typeof wordocchiTopics>([]);
 
-    const nextTopic = () => {
+  const nextTopic = () => {
     let newTopic = currentTopic;
 
     while (newTopic.id === currentTopic.id && wordocchiTopics.length > 1) {
-        const randomIndex = Math.floor(
-        Math.random() * wordocchiTopics.length
-        );
+      const randomIndex = Math.floor(Math.random() * wordocchiTopics.length);
 
-        newTopic = wordocchiTopics[randomIndex];
+      newTopic = wordocchiTopics[randomIndex];
     }
+    setHistory((prev) => [currentTopic, ...prev]);
 
     setCurrentTopic(newTopic);
-    };
+  };
 
   return (
     <main className="min-h-screen bg-orange-50">
@@ -36,9 +36,7 @@ export default function WordocchiPage() {
             お題ジェネレーター
           </p>
 
-          <h1 className="mt-2 text-4xl font-bold text-gray-900">
-            ワードッチ
-          </h1>
+          <h1 className="mt-2 text-4xl font-bold text-gray-900">ワードッチ</h1>
 
           <p className="mt-4 text-gray-600">
             ボタンを押すと、ワードッチで使えるお題をランダムに表示します。
@@ -59,6 +57,20 @@ export default function WordocchiPage() {
           >
             次のお題
           </button>
+          <div className="mt-10">
+            <h2 className="text-xl font-bold text-gray-900">履歴</h2>
+
+            <div className="mt-4 space-y-2">
+              {history.map((topic) => (
+                <div
+                  key={topic.id}
+                  className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-gray-700 shadow-sm"
+                  >
+                  {topic.text}
+                </div>
+              ))}
+            </div>
+          </div>
         </section>
       </div>
     </main>
