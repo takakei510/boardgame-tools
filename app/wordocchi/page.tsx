@@ -9,15 +9,22 @@ export default function WordocchiPage() {
   const [history, setHistory] = useState<typeof wordocchiTopics>([]);
 
   const nextTopic = () => {
-    let newTopic = currentTopic;
+    const usedIds = new Set([
+      currentTopic.id,
+      ...history.map((topic) => topic.id),
+    ]);
 
-    while (newTopic.id === currentTopic.id && wordocchiTopics.length > 1) {
-      const randomIndex = Math.floor(Math.random() * wordocchiTopics.length);
+    const availableTopics = wordocchiTopics.filter(
+      (topic) => !usedIds.has(topic.id)
+    );
 
-      newTopic = wordocchiTopics[randomIndex];
-    }
-    setHistory((prev) => [currentTopic, ...prev]);
+    const randomIndex = Math.floor(
+      Math.random() * availableTopics.length
+    );
 
+    const newTopic = availableTopics[randomIndex];
+
+    setHistory((prev) => [currentTopic, ...prev].slice(0, 5));
     setCurrentTopic(newTopic);
   };
 
