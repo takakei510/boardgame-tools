@@ -3,23 +3,24 @@
 import { useState } from "react";
 import Link from "next/link";
 
+type WaitingRoomClientProps = {
+  roomCode: string;
+};
+
 const samplePlayers = [
   { id: 1, name: "Kei", isHost: true },
   { id: 2, name: "Yuki", isHost: false },
 ];
 
-type WaitingRoomPageProps = {
-  params: Promise<{
-    roomCode: string;
-  }>;
-};
+const MAX_PLAYERS = 8;
 
-export default function WaitingRoomPage({ params }: WaitingRoomPageProps) {
+export default function WaitingRoomClient({
+  roomCode,
+}: WaitingRoomClientProps) {
   const [copied, setCopied] = useState(false);
-  const players = samplePlayers; // 仮の参加者リスト。実際にはサーバーから取得する必要があります。
-  const canStart = samplePlayers.length >= 2;
-  const roomCode = "ABCD"; // 仮の部屋番号。実際にはparamsから取得する必要があります。
-  const MAX_PLAYERS = 8;
+
+  const players = samplePlayers;
+  const canStart = players.length >= 2;
 
   const copyRoomCode = async () => {
     try {
@@ -35,7 +36,7 @@ export default function WaitingRoomPage({ params }: WaitingRoomPageProps) {
   };
 
   return (
-    <main className="min-h-screen bg-orange-50 px-6 py-10">
+      <main className="min-h-screen bg-orange-50 px-6 py-10">
       <div className="mx-auto max-w-xl">
         <Link
           href="/wordocchi/room"
