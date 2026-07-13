@@ -1,16 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 
 type WaitingRoomClientProps = {
   roomCode: string;
 };
 
-const samplePlayers = [
-  { id: 1, name: "Kei", isHost: true },
-  { id: 2, name: "Yuki", isHost: false },
-];
+type Player = {
+  id: string;
+  game_id: string;
+  name: string;
+  is_host: boolean;
+  join_order: number;
+  connected: boolean;
+};
 
 const MAX_PLAYERS = 8;
 
@@ -18,9 +23,49 @@ export default function WaitingRoomClient({
   roomCode,
 }: WaitingRoomClientProps) {
   const [copied, setCopied] = useState(false);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  const players = samplePlayers;
   const canStart = players.length >= 2;
+
+  useEffect(() => {
+    const fetchPlayers = async () => {
+      setIsLoading(true);
+      setErrorMessage("");
+
+      const { data: game, error: gameError } = await supabase
+        .from("games")
+        .select("id")
+        .eq("room_code", roomCode)
+        .single();
+
+      if (gameError || !game) {
+        console.error("部屋取得エラー:", gameError);
+        setErrorMessage("部屋が見つかりませんでした。");
+        setIsLoading(false);
+        return;
+      }
+
+      const { data: playerData, error: playerError } = await supabase
+        .from("players")
+        .select("id, game_id, name, is_host, join_order, connected")
+        .eq("game_id", game.id)
+        .order("join_order", { ascending: true });
+
+      if (playerError) {
+        console.error("参加者取得エラー:", playerError);
+        setErrorMessage("参加者の取得に失敗しました。");
+        setIsLoading(false);
+        return;
+      }
+
+      setPlayers(playerData ?? []);
+      setIsLoading(false);
+    };
+
+    fetchPlayers();
+  }, [roomCode]);
 
   const copyRoomCode = async () => {
     try {
@@ -36,7 +81,7 @@ export default function WaitingRoomClient({
   };
 
   return (
-      <main className="min-h-screen bg-orange-50 px-6 py-10">
+    <main className="min-h-screen bg-orange-50 px-6 py-10">
       <div className="mx-auto max-w-xl">
         <Link
           href="/wordocchi/room"
@@ -48,9 +93,7 @@ export default function WaitingRoomClient({
         <section className="mt-8 rounded-3xl bg-white p-8 shadow-sm">
           <p className="text-sm font-bold text-orange-600">オンラインプレイ</p>
 
-          <h1 className="mt-2 text-4xl font-bold text-gray-900">
-            待機ルーム
-          </h1>
+          <h1 className="mt-2 text-4xl font-bold text-gray-900">待機ルーム</h1>
 
           <div className="mt-8 rounded-2xl bg-orange-100 p-6 text-center">
             <p className="text-sm font-semibold text-orange-700">部屋番号</p>
@@ -73,27 +116,45 @@ export default function WaitingRoomClient({
               <h2 className="text-xl font-bold text-gray-900">参加者</h2>
 
               <span className="text-sm text-gray-500">
-                {samplePlayers.length}/{MAX_PLAYERS}人
+                {players.length}/{MAX_PLAYERS}人
               </span>
             </div>
 
-            <div className="mt-4 space-y-3">
-              {samplePlayers.map((player) => (
-                <div
-                  key={player.id}
-                  className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-4 py-3"
-                >
-                  <span className="font-semibold text-gray-800">
-                    {player.name}
-                  </span>
+            {errorMessage && (
+              <p className="mt-4 text-center font-semibold text-red-600">
+                {errorMessage}
+              </p>
+            )}
 
-                  {player.isHost && (
-                    <span className="rounded-full bg-orange-100 px-3 py-1 text-sm font-bold text-orange-700">
-                      👑 親
+            <div className="mt-4 space-y-3">
+              {isLoading && (
+                <p className="text-center text-gray-500">
+                  参加者を読み込んでいます...
+                </p>
+              )}
+
+              {!isLoading &&
+                players.map((player) => (
+                  <div
+                    key={player.id}
+                    className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-4 py-3"
+                  >
+                    <span className="flex items-center gap-3 font-semibold text-gray-800">
+                      <span
+                        className={`h-3 w-3 rounded-full ${
+                          player.connected ? "bg-green-500" : "bg-gray-400"
+                        }`}
+                      />
+                      {player.name}
                     </span>
-                  )}
-                </div>
-              ))}
+
+                    {player.is_host && (
+                      <span className="rounded-full bg-orange-100 px-3 py-1 text-sm font-bold text-orange-700">
+                        👑 親
+                      </span>
+                    )}
+                  </div>
+                ))}
             </div>
           </div>
 

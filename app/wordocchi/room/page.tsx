@@ -84,6 +84,66 @@ export default function WordocchiRoomPage() {
       setIsCreating(false);
     }
   };
+  const joinRoom = async () => {
+    setIsJoining(true);
+    setErrorMessage("");
+
+    const displayName = getPlayerName();
+    const normalizedRoomCode = roomCode.trim().toUpperCase();
+
+    try {
+      const { data: game, error: gameError } = await supabase
+        .from("games")
+        .select("id, room_code, status")
+        .eq("room_code", normalizedRoomCode)
+        .single();
+
+      if (gameError || !game) {
+        throw new Error("入力された部屋が見つかりませんでした。");
+      }
+
+      if (game.status !== "waiting") {
+        throw new Error("この部屋はすでにゲームを開始しています。");
+      }
+
+      const { count, error: countError } = await supabase
+        .from("players")
+        .select("id", { count: "exact", head: true })
+        .eq("game_id", game.id);
+
+      if (countError) {
+        throw new Error(countError.message);
+      }
+
+      const playerCount = count ?? 0;
+
+      if (playerCount >= 8) {
+        throw new Error("この部屋は満員です。");
+      }
+
+      const { error: playerError } = await supabase.from("players").insert({
+        game_id: game.id,
+        name: displayName,
+        is_host: false,
+        join_order: playerCount + 1,
+        connected: true,
+      });
+
+      if (playerError) {
+        throw new Error(playerError.message);
+      }
+
+      router.push(`/wordocchi/online/${game.room_code}`);
+    } catch (error) {
+      console.error("部屋参加エラー:", error);
+
+      setErrorMessage(
+        error instanceof Error ? error.message : "部屋への参加に失敗しました。",
+      );
+
+      setIsJoining(false);
+    }
+  };
 
   return (
     <main className="min-h-screen bg-orange-50 px-6 py-10">
@@ -155,10 +215,11 @@ export default function WordocchiRoomPage() {
 
             <button
               type="button"
+              onClick={joinRoom}
               disabled={roomCode.trim().length !== 4 || isJoining}
               className="w-full rounded-2xl border-2 border-orange-500 px-6 py-4 text-lg font-bold text-orange-600 transition hover:bg-orange-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-400"
             >
-              部屋に参加する
+              {isJoining ? "参加中..." : "部屋に参加する"}
             </button>
           </div>
         </section>
