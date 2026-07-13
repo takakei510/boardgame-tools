@@ -11,37 +11,68 @@ export default function WordocchiRoomPage() {
 
   const [isCreating, setIsCreating] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [playerName, setPlayerName] = useState("");
+  const [roomCode, setRoomCode] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
+
+  const getPlayerName = () => {
+    const trimmedName = playerName.trim();
+
+    if (trimmedName !== "") {
+      return trimmedName;
+    }
+
+    const randomNumber = Math.floor(Math.random() * 9000) + 1000;
+
+    return `プレイヤー${randomNumber}`;
+  };
 
   const createRoom = async () => {
     setIsCreating(true);
     setErrorMessage("");
 
+    const displayName = getPlayerName();
+
     try {
       for (let attempt = 0; attempt < 5; attempt++) {
         const roomCode = generateRoomCode();
 
-        const { error } = await supabase.from("games").insert({
-          room_code: roomCode,
-          game_type: "wordocchi",
-          status: "waiting",
+        const { data: game, error: gameError } = await supabase
+          .from("games")
+          .insert({
+            room_code: generateRoomCode(),
+            game_type: "wordocchi",
+            status: "waiting",
+          })
+          .select("id, room_code")
+          .single();
+
+        if (gameError) {
+          if (gameError.code === "23505") {
+            continue;
+          }
+
+          throw new Error(gameError.message);
+        }
+
+        if (!game) {
+          throw new Error("作成した部屋の情報を取得できませんでした。");
+        }
+
+        const { error: playerError } = await supabase.from("players").insert({
+          game_id: game.id,
+          name: displayName,
+          is_host: true,
+          join_order: 1,
+          connected: true,
         });
 
-        if (!error) {
-          router.push(`/wordocchi/online/${roomCode}`);
-          return;
+        if (playerError) {
+          throw new Error(playerError.message);
         }
 
-        // room_codeの重複エラーなら、別の番号で再試行
-        if (error.code !== "23505") {
-          console.error("Supabaseエラー:", {
-            message: error.message,
-            code: error.code,
-            details: error.details,
-            hint: error.hint,
-          });
-
-          throw new Error(error.message);
-        }
+        router.push(`/wordocchi/online/${game.room_code}`);
+        return;
       }
 
       throw new Error("部屋番号の生成に失敗しました。");
@@ -72,13 +103,27 @@ export default function WordocchiRoomPage() {
           <p className="mt-4 text-gray-600">
             部屋を作るか、友達から共有された部屋番号を入力してください。
           </p>
+          <label className="mt-8 block">
+            <span className="text-sm font-bold text-gray-700">
+              あなたの名前
+            </span>
+
+            <input
+              type="text"
+              value={playerName}
+              onChange={(event) => setPlayerName(event.target.value)}
+              placeholder="例：NONAME"
+              maxLength={20}
+              className="mt-2 w-full rounded-xl border border-gray-300 px-4 py-3 text-gray-900 outline-none focus:border-orange-500"
+            />
+          </label>
 
           <div className="mt-10 space-y-4">
             <button
               type="button"
               onClick={createRoom}
               disabled={isCreating}
-              className="w-full rounded-2xl bg-orange-500 px-6 py-4 text-lg font-bold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-gray-300"
+              className="mt-4 w-full rounded-2xl bg-orange-500 px-6 py-4 text-lg font-bold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-gray-300"
             >
               {isCreating ? "部屋を作成中..." : "新しい部屋を作る"}
             </button>
@@ -98,15 +143,20 @@ export default function WordocchiRoomPage() {
 
               <input
                 type="text"
+                value={roomCode}
+                onChange={(event) =>
+                  setRoomCode(event.target.value.toUpperCase())
+                }
                 placeholder="例：ABCD"
-                maxLength={6}
+                maxLength={4}
                 className="mt-2 w-full rounded-xl border border-gray-300 px-4 py-3 text-center text-xl font-bold uppercase tracking-widest text-gray-900 outline-none focus:border-orange-500"
               />
             </label>
 
             <button
               type="button"
-              className="w-full rounded-2xl border-2 border-orange-500 px-6 py-4 text-lg font-bold text-orange-600 transition hover:bg-orange-50"
+              disabled={roomCode.trim().length !== 4 || isJoining}
+              className="w-full rounded-2xl border-2 border-orange-500 px-6 py-4 text-lg font-bold text-orange-600 transition hover:bg-orange-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-400"
             >
               部屋に参加する
             </button>
