@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { generateRoomCode } from "@/lib/roomCode";
+import { savePlayerSession } from "@/lib/session";
 
 export default function WordocchiRoomPage() {
   const router = useRouter();
@@ -35,12 +36,12 @@ export default function WordocchiRoomPage() {
 
     try {
       for (let attempt = 0; attempt < 5; attempt++) {
-        const roomCode = generateRoomCode();
+        const generatedRoomCode = generateRoomCode();
 
         const { data: game, error: gameError } = await supabase
           .from("games")
           .insert({
-            room_code: generateRoomCode(),
+            room_code: generatedRoomCode,
             game_type: "wordocchi",
             status: "waiting",
           })
@@ -59,17 +60,25 @@ export default function WordocchiRoomPage() {
           throw new Error("作成した部屋の情報を取得できませんでした。");
         }
 
-        const { error: playerError } = await supabase.from("players").insert({
-          game_id: game.id,
-          name: displayName,
-          is_host: true,
-          join_order: 1,
-          connected: true,
-        });
+        const { data: player, error: playerError } = await supabase
+          .from("players")
+          .insert({
+            game_id: game.id,
+            name: displayName,
+            is_host: true,
+            join_order: 1,
+            connected: true,
+          })
+          .select("id")
+          .single();
 
-        if (playerError) {
-          throw new Error(playerError.message);
+        if (playerError || !player) {
+          throw new Error(
+            playerError?.message ?? "親プレイヤーの登録に失敗しました。",
+          );
         }
+
+        savePlayerSession(player.id, game.room_code);
 
         router.push(`/wordocchi/online/${game.room_code}`);
         return;
@@ -121,17 +130,25 @@ export default function WordocchiRoomPage() {
         throw new Error("この部屋は満員です。");
       }
 
-      const { error: playerError } = await supabase.from("players").insert({
-        game_id: game.id,
-        name: displayName,
-        is_host: false,
-        join_order: playerCount + 1,
-        connected: true,
-      });
+      const { data: player, error: playerError } = await supabase
+        .from("players")
+        .insert({
+          game_id: game.id,
+          name: displayName,
+          is_host: false,
+          join_order: playerCount + 1,
+          connected: true,
+        })
+        .select("id")
+        .single();
 
-      if (playerError) {
-        throw new Error(playerError.message);
+      if (playerError || !player) {
+        throw new Error(
+          playerError?.message ?? "プレイヤーの登録に失敗しました。",
+        );
       }
+
+      savePlayerSession(player.id, game.room_code);
 
       router.push(`/wordocchi/online/${game.room_code}`);
     } catch (error) {

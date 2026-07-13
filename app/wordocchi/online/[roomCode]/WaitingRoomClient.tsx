@@ -22,6 +22,7 @@ const MAX_PLAYERS = 8;
 export default function WaitingRoomClient({
   roomCode,
 }: WaitingRoomClientProps) {
+  // Stateはコンポーネント内
   const [copied, setCopied] = useState(false);
   const [players, setPlayers] = useState<Player[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -29,8 +30,27 @@ export default function WaitingRoomClient({
 
   const canStart = players.length >= 2;
 
+  // fetchPlayersもコンポーネント内、useEffectより上
+  const fetchPlayers = async (gameId: string) => {
+    const { data, error } = await supabase
+      .from("players")
+      .select("id, game_id, name, is_host, join_order, connected")
+      .eq("game_id", gameId)
+      .order("join_order", { ascending: true });
+
+    if (error) {
+      console.error("参加者取得エラー:", error);
+      setErrorMessage("参加者の取得に失敗しました。");
+      return;
+    }
+
+    setPlayers(data ?? []);
+  };
+
   useEffect(() => {
-    const fetchPlayers = async () => {
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    const setupRealtime = async () => {
       setIsLoading(true);
       setErrorMessage("");
 
@@ -47,26 +67,38 @@ export default function WaitingRoomClient({
         return;
       }
 
-      const { data: playerData, error: playerError } = await supabase
-        .from("players")
-        .select("id, game_id, name, is_host, join_order, connected")
-        .eq("game_id", game.id)
-        .order("join_order", { ascending: true });
+      // gameはこの関数内でだけ使う
+      await fetchPlayers(game.id);
 
-      if (playerError) {
-        console.error("参加者取得エラー:", playerError);
-        setErrorMessage("参加者の取得に失敗しました。");
-        setIsLoading(false);
-        return;
-      }
+      channel = supabase
+        .channel(`players-${game.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "players",
+            filter: `game_id=eq.${game.id}`,
+          },
+          () => {
+            fetchPlayers(game.id);
+          },
+        )
+        .subscribe();
 
-      setPlayers(playerData ?? []);
       setIsLoading(false);
     };
 
-    fetchPlayers();
+    setupRealtime();
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
   }, [roomCode]);
 
+  // setCopiedを使う関数もコンポーネント内
   const copyRoomCode = async () => {
     try {
       await navigator.clipboard.writeText(roomCode);
