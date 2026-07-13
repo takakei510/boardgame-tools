@@ -1,64 +1,100 @@
-boardgame-tools
+# 🎲 BoardGame Tools
 
-ボードゲーム向けの小さなユーティリティをまとめた Next.js アプリケーションです。現在はワードゲーム支援ツール Wordocchi を中心に、トピック生成とオンラインプレイ用の導線を提供しています。
+**BoardGame Tools** は、ボードゲームをより快適に遊ぶためのWebツール集です。
 
-## Features
+現在は **ワードッチ (Wordocchi)** のサポートツールを開発中で、今後はオンラインプレイ機能や他のボードゲームにも対応予定です。
 
-- トップページから各ツールへすぐ移動できるランチャー
-- Wordocchi のお題ジェネレーター
-- お題のコピー、履歴表示、再シャッフル
-- オンラインプレイ向けのルーム画面
-- トピックとワードのデータを分離管理
+---
 
-## Routes
+## ✨ 現在の機能
 
-- `/` : プロジェクトのトップページ
-- `/wordocchi` : Wordocchi のお題ジェネレーター
-- `/wordocchi/room` : オンラインプレイ用ルーム画面
+### ワードッチ
 
-## Tech Stack
+- ランダムなお題表示
+- お題履歴（最新5件）
+- お題のコピー
+- 初期ワード候補を3つ表示
+- お題・候補の重複防止
 
-- Next.js 16
-- React 19
-- TypeScript
-- ESLint
+---
 
-## Getting Started
+## 🚧 開発予定
+
+### ワードッチ
+
+- [ ] オンライン対戦
+- [ ] 部屋作成・参加
+- [ ] 親・子画面
+- [ ] リアルタイム同期（Supabase）
+
+### 今後対応予定
+
+- [ ] ito
+- [ ] コードネーム
+- [ ] Just One
+- [ ] その他ボードゲーム
+
+---
+
+## 🏗️ プロジェクト構成
+
+```text
+app/
+├── page.tsx
+├── wordocchi/
+│   ├── page.tsx
+│   └── room/
+├── components/
+├── data/
+└── docs/
+```
+
+---
+
+## 📚 ドキュメント
+
+- Architecture
+- Database Design
+- State Flow
+
+（docsフォルダを参照）
+
+---
+
+## 🚀 開発
+
+### 開発サーバー
 
 ```bash
 npm install
 npm run dev
 ```
 
-開発サーバーを起動したら、ブラウザで `http://localhost:3000` を開いてください。保存時にホットリロードが反映されます。
-
-## Build
+### 本番ビルド
 
 ```bash
 npm run build
 npm run start
 ```
 
-## Project Structure
+---
 
-- `app/` : アプリケーションルートとページ
-- `app/wordocchi/page.tsx` : Wordocchi のメイン UI
-- `app/wordocchi/room/page.tsx` : ルーム画面
-- `data/wordocchiTopics.ts` : Wordocchi 用トピック定義
-- `data/wordocchiWords.json` : 初期ワード候補
-- `data/wordocchiTopics.json` : トピック一覧の静的データ
-- `public/` : 静的アセット
+## 🛠️ 使用技術
 
-## Contributing
+- Next.js
+- React
+- TypeScript
+- Tailwind CSS
+- Vercel
 
-Issue でバグ報告や提案を受け付けています。小さな修正や改善提案の Pull Request も歓迎します。
+（予定）
+- Supabase
+- PostgreSQL
 
-## Development Notes
+---
 
-- ページの見た目や挙動を変える場合は `app/` を編集してください。
-- Wordocchi の出題内容を更新する場合は `data/` 配下のデータを更新してください。
-- ルーム画面は現在 UI 中心の実装です。今後の拡張に合わせて機能説明を追記できます。
+## 🎯 プロジェクトの目標
 
-## Reference
+ボードゲームをブラウザだけで快適に遊べるツール集を作ること。
 
-- Next.js Documentation: https://nextjs.org/docs
+ローカルでの補助ツールだけでなく、オンラインでも利用できるリアルタイムゲーム環境を目指しています。
