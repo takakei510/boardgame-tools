@@ -1,48 +1,64 @@
 boardgame-tools
 
-これは Next.js で作成されたプロジェクトです。本リポジトリは「ボードゲーム向けユーティリティ」の集合体で、現在は主にワードゲーム支援ツール（Wordocchi）を含んでいます。
+ボードゲーム向けの小さなユーティリティをまとめた Next.js アプリケーションです。現在はワードゲーム支援ツール Wordocchi を中心に、トピック生成とオンラインプレイ用の導線を提供しています。
 
-**目的**
-- **用途:** ローカルでボードゲーム関連のツールを開発・共有するための小さなユーティリティ集。
-- **主な機能:** トピック一覧生成や表示（`app/wordocchi`）、トピックデータ管理（`data/wordocchiTopics.ts`）、静的アセット（`public/`）など。
+## Features
 
-**構成（主なファイル／フォルダ）**
-- `app/` : Next.js のアプリケーションルート。ページやレイアウトを含みます。
-- `app/wordocchi/page.tsx` : Wordocchi の UI エントリポイント。
-- `data/wordocchiTopics.ts` : ワードゲーム用トピックデータ。
-- `public/` : 画像や静的ファイル。
-- `package.json`, `tsconfig.json` など：プロジェクト設定。
+- トップページから各ツールへすぐ移動できるランチャー
+- Wordocchi のお題ジェネレーター
+- お題のコピー、履歴表示、再シャッフル
+- オンラインプレイ向けのルーム画面
+- トピックとワードのデータを分離管理
 
-## 開発（ローカル実行）
+## Routes
 
-開発サーバーを起動するには、まず依存をインストールしてから開発コマンドを実行してください。
+- `/` : プロジェクトのトップページ
+- `/wordocchi` : Wordocchi のお題ジェネレーター
+- `/wordocchi/room` : オンラインプレイ用ルーム画面
+
+## Tech Stack
+
+- Next.js 16
+- React 19
+- TypeScript
+- ESLint
+
+## Getting Started
 
 ```bash
 npm install
 npm run dev
 ```
 
-ブラウザで `http://localhost:3000` を開くとアプリが表示されます。編集を保存するとホットリロードで自動更新されます。
+開発サーバーを起動したら、ブラウザで `http://localhost:3000` を開いてください。保存時にホットリロードが反映されます。
 
-## ビルドと起動（本番向け）
+## Build
 
 ```bash
 npm run build
 npm run start
 ```
 
-## 推奨環境
-- Node.js 16 以上（プロジェクトの `engines` が指定されている場合はそれに従ってください）
+## Project Structure
 
-## 開発のヒント
-- 既存ページを編集する場合は `app/` 以下を直接編集してください。
-- トピックデータを更新する場合は `data/wordocchiTopics.ts` を編集すると、UI に反映されます。
+- `app/` : アプリケーションルートとページ
+- `app/wordocchi/page.tsx` : Wordocchi のメイン UI
+- `app/wordocchi/room/page.tsx` : ルーム画面
+- `data/wordocchiTopics.ts` : Wordocchi 用トピック定義
+- `data/wordocchiWords.json` : 初期ワード候補
+- `data/wordocchiTopics.json` : トピック一覧の静的データ
+- `public/` : 静的アセット
 
-## 貢献
-- バグ報告や機能提案は Issue を作成してください。簡単な修正なら Pull Request を歓迎します。
+## Contributing
 
-## 参考
-- Next.js ドキュメント: https://nextjs.org/docs
+Issue でバグ報告や提案を受け付けています。小さな修正や改善提案の Pull Request も歓迎します。
 
----
-（元テンプレートの英文説明は削除し、プロジェクト固有の説明に差し替えました）
+## Development Notes
+
+- ページの見た目や挙動を変える場合は `app/` を編集してください。
+- Wordocchi の出題内容を更新する場合は `data/` 配下のデータを更新してください。
+- ルーム画面は現在 UI 中心の実装です。今後の拡張に合わせて機能説明を追記できます。
+
+## Reference
+
+- Next.js Documentation: https://nextjs.org/docs
