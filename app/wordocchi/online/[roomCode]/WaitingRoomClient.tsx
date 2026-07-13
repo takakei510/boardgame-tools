@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
+import { getPlayerId, clearPlayerSession } from "@/lib/session";
 
 type WaitingRoomClientProps = {
   roomCode: string;
@@ -27,6 +29,8 @@ export default function WaitingRoomClient({
   const [players, setPlayers] = useState<Player[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const router = useRouter();
+  const [isLeaving, setIsLeaving] = useState(false);
 
   const canStart = players.length >= 2;
 
@@ -111,16 +115,82 @@ export default function WaitingRoomClient({
       console.error("部屋番号のコピーに失敗しました。", error);
     }
   };
+const leaveRoom = async () => {
+  setIsLeaving(true);
+  setErrorMessage("");
+
+  const playerId = getPlayerId();
+
+  if (!playerId) {
+    clearPlayerSession();
+    router.push("/wordocchi/room");
+    return;
+  }
+
+  try {
+    const { data: currentPlayer, error: fetchError } = await supabase
+      .from("players")
+      .select("id, is_host")
+      .eq("id", playerId)
+      .single();
+
+    if (fetchError || !currentPlayer) {
+      throw new Error(
+        fetchError?.message ?? "プレイヤー情報が見つかりませんでした。",
+      );
+    }
+
+    if (currentPlayer.is_host) {
+      const { error: deleteGameError } = await supabase
+        .from("games")
+        .delete()
+        .eq("room_code", roomCode);
+
+      if (deleteGameError) {
+        throw new Error(deleteGameError.message);
+      }
+    } else {
+      const { data: deletedPlayer, error: deletePlayerError } = await supabase
+        .from("players")
+        .delete()
+        .eq("id", playerId)
+        .select("id")
+        .single();
+
+      if (deletePlayerError || !deletedPlayer) {
+        throw new Error(
+          deletePlayerError?.message ??
+            "プレイヤーを削除できませんでした。",
+        );
+      }
+    }
+
+    clearPlayerSession();
+    router.push("/wordocchi/room");
+  } catch (error) {
+    console.error("退出エラー:", error);
+
+    setErrorMessage(
+      error instanceof Error
+        ? error.message
+        : "部屋から退出できませんでした。",
+    );
+
+    setIsLeaving(false);
+  }
+};
 
   return (
     <main className="min-h-screen bg-orange-50 px-6 py-10">
       <div className="mx-auto max-w-xl">
-        <Link
-          href="/wordocchi/room"
-          className="text-sm font-semibold text-orange-700 hover:underline"
+        <button
+          type="button"
+          onClick={leaveRoom}
+          disabled={isLeaving}
+          className="text-sm font-semibold text-orange-700 hover:underline disabled:text-gray-400"
         >
-          ← 部屋作成・参加に戻る
-        </Link>
+          {isLeaving ? "退出中..." : "← 部屋を退出する"}
+        </button>
 
         <section className="mt-8 rounded-3xl bg-white p-8 shadow-sm">
           <p className="text-sm font-bold text-orange-600">オンラインプレイ</p>
