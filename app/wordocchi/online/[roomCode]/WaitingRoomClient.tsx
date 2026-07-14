@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { getPlayerId, clearPlayerSession } from "@/lib/session";
@@ -30,8 +30,34 @@ export default function WaitingRoomClient({
   const [errorMessage, setErrorMessage] = useState("");
   const router = useRouter();
   const [isLeaving, setIsLeaving] = useState(false);
+  const roomClosedRef = useRef(false);
 
   const canStart = players.length >= 2;
+
+  const handleRoomClosed = useCallback(() => {
+    if (roomClosedRef.current) {
+      return;
+    }
+
+    roomClosedRef.current = true;
+    clearPlayerSession();
+    router.replace("/wordocchi/room?reason=host-left");
+  }, [router]);
+
+  const checkRoomExists = useCallback(async (): Promise<boolean> => {
+    const { data, error } = await supabase
+      .from("games")
+      .select("id")
+      .eq("room_code", roomCode)
+      .maybeSingle();
+
+    if (error) {
+      console.error("部屋存在確認エラー:", error);
+      return true;
+    }
+
+    return data !== null;
+  }, [roomCode]);
 
   // fetchPlayersもコンポーネント内、useEffectより上
   const fetchPlayers = async (gameId: string) => {
@@ -51,7 +77,10 @@ export default function WaitingRoomClient({
   };
 
   useEffect(() => {
-    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let playersChannel: ReturnType<typeof supabase.channel> | null = null;
+    let gameChannel: ReturnType<typeof supabase.channel> | null = null;
+    let roomCheckInterval: number | null = null;
+    let isActive = true;
 
     const setupRealtime = async () => {
       setIsLoading(true);
@@ -61,19 +90,40 @@ export default function WaitingRoomClient({
         .from("games")
         .select("id")
         .eq("room_code", roomCode)
-        .single();
+        .maybeSingle();
+
+      if (!isActive) {
+        return;
+      }
 
       if (gameError || !game) {
         console.error("部屋取得エラー:", gameError);
-        setErrorMessage("部屋が見つかりませんでした。");
+        clearPlayerSession();
+        router.replace("/wordocchi/room?reason=room-not-found");
         setIsLoading(false);
         return;
       }
 
       // gameはこの関数内でだけ使う
+      const exists = await checkRoomExists();
+
+      if (!isActive) {
+        return;
+      }
+
+      if (!exists) {
+        handleRoomClosed();
+        setIsLoading(false);
+        return;
+      }
+
       await fetchPlayers(game.id);
 
-      channel = supabase
+      if (!isActive) {
+        return;
+      }
+
+      playersChannel = supabase
         .channel(`players-${game.id}`)
         .on(
           "postgres_changes",
@@ -82,14 +132,53 @@ export default function WaitingRoomClient({
             schema: "public",
             table: "players",
           },
-          (payload) => {
+          async (payload) => {
             console.log("players変更:", payload);
-            fetchPlayers(game.id);
+
+            const roomExists = await checkRoomExists();
+
+            if (!roomExists) {
+              handleRoomClosed();
+              return;
+            }
+
+            await fetchPlayers(game.id);
           },
         )
         .subscribe((status) => {
           console.log("Realtime status:", status);
         });
+
+      gameChannel = supabase
+        .channel(`game-${game.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "games",
+          },
+          async () => {
+            const roomExists = await checkRoomExists();
+
+            if (!roomExists) {
+              handleRoomClosed();
+            }
+          },
+        )
+        .subscribe();
+
+      roomCheckInterval = window.setInterval(async () => {
+        if (!isActive) {
+          return;
+        }
+
+        const roomExists = await checkRoomExists();
+
+        if (!roomExists) {
+          handleRoomClosed();
+        }
+      }, 5000);
 
       setIsLoading(false);
     };
@@ -97,11 +186,21 @@ export default function WaitingRoomClient({
     setupRealtime();
 
     return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
+      isActive = false;
+
+      if (roomCheckInterval !== null) {
+        window.clearInterval(roomCheckInterval);
+      }
+
+      if (playersChannel) {
+        supabase.removeChannel(playersChannel);
+      }
+
+      if (gameChannel) {
+        supabase.removeChannel(gameChannel);
       }
     };
-  }, [roomCode]);
+  }, [checkRoomExists, handleRoomClosed, router, roomCode]);
 
   // setCopiedを使う関数もコンポーネント内
   const copyRoomCode = async () => {
@@ -124,7 +223,7 @@ export default function WaitingRoomClient({
 
     if (!playerId) {
       clearPlayerSession();
-      router.push("/wordocchi/room");
+      router.replace("/wordocchi/room");
       return;
     }
 
@@ -133,12 +232,16 @@ export default function WaitingRoomClient({
         .from("players")
         .select("id, is_host")
         .eq("id", playerId)
-        .single();
+        .maybeSingle();
 
-      if (fetchError || !currentPlayer) {
-        throw new Error(
-          fetchError?.message ?? "プレイヤー情報が見つかりませんでした。",
-        );
+      if (fetchError) {
+        throw new Error(fetchError.message);
+      }
+
+      if (!currentPlayer) {
+        clearPlayerSession();
+        router.replace("/wordocchi/room");
+        return;
       }
 
       if (currentPlayer.is_host) {
@@ -151,22 +254,20 @@ export default function WaitingRoomClient({
           throw new Error(deleteGameError.message);
         }
       } else {
-        const { data: deletedPlayer, error: deletePlayerError } = await supabase
+        const { error: deletePlayerError } = await supabase
           .from("players")
           .delete()
           .eq("id", playerId)
           .select("id")
-          .single();
+          .maybeSingle();
 
-        if (deletePlayerError || !deletedPlayer) {
-          throw new Error(
-            deletePlayerError?.message ?? "プレイヤーを削除できませんでした。",
-          );
+        if (deletePlayerError) {
+          throw new Error(deletePlayerError.message);
         }
       }
 
       clearPlayerSession();
-      router.push("/wordocchi/room");
+      router.replace("/wordocchi/room");
     } catch (error) {
       console.error("退出エラー:", error);
 
