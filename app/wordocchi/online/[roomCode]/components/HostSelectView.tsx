@@ -36,7 +36,13 @@ export default function HostSelectView({
               {roomCode}
             </p>
             <p className="mt-4 text-sm font-semibold text-orange-700">お題</p>
-            <p className="mt-2 text-2xl font-bold text-gray-900">{topicText}</p>
+            {isHost ? (
+              <p className="mt-2 text-2xl font-bold text-gray-900">{topicText}</p>
+            ) : (
+              <p className="mt-2 text-2xl font-bold text-gray-900">
+                お題は親だけに表示されています
+              </p>
+            )}
             <p className="mt-4 text-sm font-semibold text-orange-700">現在のワード</p>
             <p className="mt-2 text-3xl font-bold text-gray-900">{currentWord}</p>
           </div>

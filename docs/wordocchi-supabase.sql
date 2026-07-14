@@ -11,7 +11,16 @@ alter table public.games
 add column if not exists round_number integer not null default 0;
 
 alter table public.games
+add column if not exists topic_round integer not null default 1;
+
+alter table public.games
+add column if not exists initial_word text;
+
+alter table public.games
 add column if not exists first_word_candidates jsonb;
+
+alter table public.games
+add column if not exists used_topic_ids jsonb not null default '[]'::jsonb;
 
 create table if not exists public.submissions (
   id uuid primary key default gen_random_uuid(),
@@ -19,10 +28,28 @@ create table if not exists public.submissions (
   player_id uuid not null references public.players(id) on delete cascade,
   word text not null,
   round_number integer not null,
+  topic_round integer not null default 1,
   selected boolean not null default false,
-  created_at timestamptz not null default now(),
-  unique (game_id, player_id, round_number)
+  created_at timestamptz not null default now()
 );
+
+alter table public.submissions
+drop constraint if exists submissions_game_id_player_id_round_number_key;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'submissions_unique_player_per_topic'
+      and conrelid = 'public.submissions'::regclass
+  ) then
+    alter table public.submissions
+    add constraint submissions_unique_player_per_topic
+    unique (game_id, player_id, topic_round);
+  end if;
+end
+$$;
 
 create index if not exists submissions_game_id_idx
   on public.submissions (game_id);
@@ -32,6 +59,9 @@ create index if not exists submissions_player_id_idx
 
 create index if not exists submissions_game_player_round_idx
   on public.submissions (game_id, player_id, round_number);
+
+create index if not exists submissions_game_player_topic_round_idx
+  on public.submissions (game_id, player_id, topic_round);
 
 alter table public.submissions enable row level security;
 

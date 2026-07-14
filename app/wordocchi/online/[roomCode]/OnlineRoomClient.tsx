@@ -7,11 +7,16 @@ import { clearPlayerSession, getPlayerId } from "@/lib/session";
 import wordocchiTopics from "@/data/wordocchiTopics.json";
 import wordocchiWords from "@/data/wordocchiWords.json";
 import {
-  buildGameStartPayload,
-  findSubmissionForRound,
+  finishGame as buildFinishGamePayload,
   getFirstAnsweringPlayer,
-  getNextAnsweringPlayer,
+  getNextUnansweredPlayer,
+  getSubmissionsForTopicRound,
   normalizeFirstWordCandidates,
+  selectFirstWord as buildFirstWordPayload,
+  selectWinningWord as buildWinningWordPayload,
+  startGame as buildStartGamePayload,
+  startNextTopic as buildNextTopicPayload,
+  submitWord as buildSubmissionPayload,
   type FirstWordCandidate,
   type GameRow,
   type PlayerRow,
@@ -21,18 +26,26 @@ import WaitingRoomView from "./components/WaitingRoomView";
 import FirstWordSelectView from "./components/FirstWordSelectView";
 import PlayerInputView from "./components/PlayerInputView";
 import HostSelectView from "./components/HostSelectView";
+import TopicResultView from "./components/TopicResultView";
 import FinishedView from "./components/FinishedView";
 
 type RoomSnapshot = {
   game: GameRow;
   players: PlayerRow[];
-  submission: SubmissionRow | null;
+  submissions: SubmissionRow[];
   topicText: string;
   firstWordCandidates: FirstWordCandidate[];
 };
 
 type OnlineRoomClientProps = {
   roomCode: string;
+};
+
+type TopicResultEntry = {
+  roundNumber: number;
+  playerName: string;
+  word: string;
+  selected: boolean;
 };
 
 export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
@@ -45,9 +58,11 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
   const [copied, setCopied] = useState(false);
   const [isStartingGame, setIsStartingGame] = useState(false);
   const [isSelectingFirstWord, setIsSelectingFirstWord] = useState(false);
-  const [answerDraft, setAnswerDraft] = useState("");
-  const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
   const [isResolvingSelection, setIsResolvingSelection] = useState(false);
+  const [isAdvancingTopic, setIsAdvancingTopic] = useState(false);
+  const [isFinishingGame, setIsFinishingGame] = useState(false);
+  const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
+  const [answerDraft, setAnswerDraft] = useState("");
 
   const clearAndLeave = useCallback(
     (target: string) => {
@@ -70,7 +85,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
     const { data: game, error: gameError } = await supabase
       .from("games")
       .select(
-        "id, room_code, game_type, status, topic_id, current_word, current_player_id, round_number, created_at, first_word_candidates",
+        "id, room_code, game_type, status, topic_id, topic_round, initial_word, current_word, current_player_id, round_number, created_at, first_word_candidates, used_topic_ids",
       )
       .eq("room_code", roomCode)
       .maybeSingle();
@@ -99,32 +114,25 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
     }
 
     const topic = wordocchiTopics.find((item) => item.id === game.topic_id);
-    const roundNumber = game.round_number ?? 0;
-    let submission: SubmissionRow | null = null;
+    const { data: submissions, error: submissionsError } = await supabase
+      .from("submissions")
+      .select(
+        "id, game_id, player_id, word, round_number, topic_round, selected, created_at",
+      )
+      .eq("game_id", game.id)
+      .eq("topic_round", game.topic_round)
+      .order("round_number", { ascending: true });
 
-    if (roundNumber > 0) {
-      const { data: submissions, error: submissionError } = await supabase
-        .from("submissions")
-        .select(
-          "id, game_id, player_id, word, round_number, selected, created_at",
-        )
-        .eq("game_id", game.id)
-        .eq("round_number", roundNumber)
-        .order("created_at", { ascending: false });
-
-      if (submissionError) {
-        console.error("回答取得エラー:", submissionError);
-        setErrorMessage("回答の取得に失敗しました。");
-        return null;
-      }
-
-      submission = findSubmissionForRound(submissions ?? [], roundNumber);
+    if (submissionsError) {
+      console.error("回答取得エラー:", submissionsError);
+      setErrorMessage("回答の取得に失敗しました。");
+      return null;
     }
 
     return {
       game,
       players: players ?? [],
-      submission,
+      submissions: submissions ?? [],
       topicText: topic?.text ?? "お題が見つかりませんでした",
       firstWordCandidates: normalizeFirstWordCandidates(
         game.first_word_candidates,
@@ -309,22 +317,6 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
     return roomSnapshot.players.find((player) => player.id === playerId) ?? null;
   }, [playerId, roomSnapshot]);
 
-  const isHost = currentPlayer?.is_host ?? false;
-  const isCurrentPlayer = roomSnapshot?.game.current_player_id === playerId;
-  const currentWord = roomSnapshot?.game.current_word ?? "まだ選ばれていません";
-  const topicText = roomSnapshot?.topicText ?? "お題を読み込んでいます";
-  const currentPlayerName =
-    roomSnapshot?.players.find(
-      (player) => player.id === roomSnapshot?.game.current_player_id,
-    )?.name ?? "次の回答者";
-  const currentSubmission = roomSnapshot?.submission ?? null;
-  const currentSubmissionPlayerName =
-    currentSubmission && roomSnapshot
-      ? roomSnapshot.players.find((player) => player.id === currentSubmission.player_id)
-          ?.name ?? null
-      : null;
-  const canStart = (roomSnapshot?.players.length ?? 0) >= 2;
-
   const copyRoomCode = async () => {
     try {
       await navigator.clipboard.writeText(roomCode);
@@ -347,17 +339,20 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
     setErrorMessage("");
 
     try {
-      const payload = buildGameStartPayload(wordocchiTopics, wordocchiWords);
+      const payload = buildStartGamePayload(wordocchiTopics, wordocchiWords);
 
       const { error } = await supabase
         .from("games")
         .update({
           topic_id: payload.topicId,
           first_word_candidates: payload.firstWordCandidates,
-          status: "select_first_word",
-          round_number: 0,
+          used_topic_ids: payload.usedTopicIds,
+          initial_word: null,
           current_word: null,
           current_player_id: null,
+          round_number: 0,
+          topic_round: 1,
+          status: "select_first_word",
         })
         .eq("id", roomSnapshot.game.id);
 
@@ -379,9 +374,9 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
       return;
     }
 
-    const nextPlayer = getFirstAnsweringPlayer(roomSnapshot.players);
+    const firstAnsweringPlayer = getFirstAnsweringPlayer(roomSnapshot.players);
 
-    if (!nextPlayer) {
+    if (!firstAnsweringPlayer) {
       setErrorMessage("回答する子プレイヤーが見つかりませんでした。");
       return;
     }
@@ -390,14 +385,11 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
     setErrorMessage("");
 
     try {
+      const payload = buildFirstWordPayload(candidate, firstAnsweringPlayer);
+
       const { error } = await supabase
         .from("games")
-        .update({
-          current_word: candidate.text,
-          current_player_id: nextPlayer.id,
-          round_number: 1,
-          status: "player_input",
-        })
+        .update(payload)
         .eq("id", roomSnapshot.game.id);
 
       if (error) {
@@ -416,7 +408,17 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
   };
 
   const submitAnswer = async () => {
-    if (!roomSnapshot || !playerId || !isCurrentPlayer || isSubmittingAnswer) {
+    if (
+      !roomSnapshot ||
+      !playerId ||
+      !isCurrentPlayer ||
+      isSubmittingAnswer ||
+      isStartingGame ||
+      isSelectingFirstWord ||
+      isResolvingSelection ||
+      isAdvancingTopic ||
+      isFinishingGame
+    ) {
       return;
     }
 
@@ -427,21 +429,38 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
       return;
     }
 
+    if (
+      roomSnapshot.submissions.some(
+        (submission) =>
+          submission.player_id === playerId &&
+          submission.topic_round === roomSnapshot.game.topic_round,
+      )
+    ) {
+      setErrorMessage("このお題にはすでに回答しています。");
+      return;
+    }
+
     setIsSubmittingAnswer(true);
     setErrorMessage("");
 
     try {
-      const roundNumber = roomSnapshot.game.round_number;
+      const payload = buildSubmissionPayload(
+        roomSnapshot.game.id,
+        playerId,
+        trimmedAnswer,
+        roomSnapshot.game.round_number,
+        roomSnapshot.game.topic_round,
+      );
 
-      const { error: insertError } = await supabase.from("submissions").insert({
-        game_id: roomSnapshot.game.id,
-        player_id: playerId,
-        word: trimmedAnswer,
-        round_number: roundNumber,
-        selected: false,
-      });
+      const { error: insertError } = await supabase
+        .from("submissions")
+        .insert(payload);
 
       if (insertError) {
+        if (insertError.code === "23505") {
+          throw new Error("このお題にはすでに回答しています。");
+        }
+
         throw new Error(insertError.message);
       }
 
@@ -465,44 +484,44 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
     }
   };
 
-  const resolveHostSelection = async (selectedSubmissionWord: string | null) => {
+  const resolveHostSelection = async (selectedCurrentWord: boolean) => {
     if (!roomSnapshot || !isHost || isResolvingSelection) {
       return;
     }
 
-    const nextPlayer = getNextAnsweringPlayer(
+    const nextPlayer = getNextUnansweredPlayer(
       roomSnapshot.players,
-      roomSnapshot.game.current_player_id,
+      roomSnapshot.submissions,
+      roomSnapshot.game.topic_round,
     );
 
-    if (!nextPlayer) {
-      setErrorMessage("次の回答者を決定できませんでした。");
-      return;
-    }
+    const selectedSubmission = selectedCurrentWord ? null : currentRoundSubmission;
 
     setIsResolvingSelection(true);
     setErrorMessage("");
 
     try {
-      if (selectedSubmissionWord && currentSubmission) {
+      if (!selectedCurrentWord && currentRoundSubmission) {
         const { error: updateSubmissionError } = await supabase
           .from("submissions")
           .update({ selected: true })
-          .eq("id", currentSubmission.id);
+          .eq("id", currentRoundSubmission.id);
 
         if (updateSubmissionError) {
           throw new Error(updateSubmissionError.message);
         }
       }
 
+      const payload = buildWinningWordPayload(
+        selectedSubmission,
+        roomSnapshot.game.current_word,
+        nextPlayer,
+        roomSnapshot.game.round_number + 1,
+      );
+
       const { error: gameError } = await supabase
         .from("games")
-        .update({
-          current_word: selectedSubmissionWord ?? roomSnapshot.game.current_word,
-          current_player_id: nextPlayer.id,
-          round_number: roomSnapshot.game.round_number + 1,
-          status: "player_input",
-        })
+        .update(payload)
         .eq("id", roomSnapshot.game.id);
 
       if (gameError) {
@@ -520,15 +539,67 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
     }
   };
 
-  const finishGame = async () => {
-    if (!roomSnapshot || !isHost) {
+  const advanceToNextTopic = async () => {
+    if (!roomSnapshot || !isHost || isAdvancingTopic) {
       return;
     }
 
+    setIsAdvancingTopic(true);
+    setErrorMessage("");
+
     try {
+      const payload = buildNextTopicPayload(
+        wordocchiTopics,
+        wordocchiWords,
+        roomSnapshot.game.used_topic_ids,
+        roomSnapshot.game.topic_id,
+        roomSnapshot.game.topic_round,
+      );
+
       const { error } = await supabase
         .from("games")
-        .update({ status: "finished" })
+        .update({
+          topic_id: payload.topicId,
+          first_word_candidates: payload.firstWordCandidates,
+          used_topic_ids: payload.usedTopicIds,
+          initial_word: payload.initial_word,
+          current_word: payload.current_word,
+          current_player_id: payload.current_player_id,
+          round_number: payload.round_number,
+          topic_round: payload.topic_round,
+          status: payload.status,
+        })
+        .eq("id", roomSnapshot.game.id);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+    } catch (error) {
+      console.error("次のお題の準備エラー:", error);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "次のお題の準備に失敗しました。",
+      );
+    } finally {
+      setIsAdvancingTopic(false);
+    }
+  };
+
+  const finishGame = async () => {
+    if (!roomSnapshot || !isHost || isFinishingGame) {
+      return;
+    }
+
+    setIsFinishingGame(true);
+    setErrorMessage("");
+
+    try {
+      const payload = buildFinishGamePayload();
+
+      const { error } = await supabase
+        .from("games")
+        .update(payload)
         .eq("id", roomSnapshot.game.id);
 
       if (error) {
@@ -539,6 +610,8 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
       setErrorMessage(
         error instanceof Error ? error.message : "ゲームを終了できませんでした。",
       );
+    } finally {
+      setIsFinishingGame(false);
     }
   };
 
@@ -627,15 +700,49 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
     );
   }
 
-  const showEndButton = isHost && roomSnapshot.game.status !== "waiting";
+  const snapshot = roomSnapshot;
+  const isHost = currentPlayer?.is_host ?? false;
+  const isCurrentPlayer = snapshot.game.current_player_id === playerId;
+  const currentWord = snapshot.game.current_word ?? "まだ選ばれていません";
+  const topicText = snapshot.topicText ?? "お題を読み込んでいます";
+  const currentPlayerName =
+    snapshot.players.find((player) => player.id === snapshot.game.current_player_id)
+      ?.name ?? "次の回答者";
+  const currentRoundSubmission =
+    snapshot.submissions.find(
+      (submission) => submission.round_number === snapshot.game.round_number,
+    ) ?? null;
+  const topicSubmissions = getSubmissionsForTopicRound(
+    snapshot.submissions,
+    snapshot.game.topic_round,
+  );
+  const topicResultEntries: TopicResultEntry[] = topicSubmissions.map((submission) => ({
+    roundNumber: submission.round_number,
+    playerName:
+      snapshot.players.find((player) => player.id === submission.player_id)?.name ??
+      "不明なプレイヤー",
+    word: submission.word,
+    selected: submission.selected,
+  }));
+  const currentSubmissionPlayerName =
+    currentRoundSubmission
+      ? snapshot.players.find((player) => player.id === currentRoundSubmission.player_id)
+          ?.name ?? null
+      : null;
+  const canStart = snapshot.players.length >= 2;
 
-  if (roomSnapshot.game.status === "waiting") {
+  const showEndButton =
+    isHost &&
+    snapshot.game.status !== "waiting" &&
+    snapshot.game.status !== "topic_result";
+
+  if (snapshot.game.status === "waiting") {
     return (
       <WaitingRoomView
         roomCode={roomCode}
-        players={roomSnapshot.players}
+        players={snapshot.players}
         isHost={isHost}
-        canStart={(roomSnapshot.players.length ?? 0) >= 2}
+        canStart={canStart}
         isStarting={isStartingGame}
         copied={copied}
         errorMessage={errorMessage}
@@ -646,7 +753,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
     );
   }
 
-  if (roomSnapshot.game.status === "select_first_word") {
+  if (snapshot.game.status === "select_first_word") {
     return (
       <div className="relative min-h-screen">
         {showEndButton && (
@@ -663,8 +770,8 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
         <FirstWordSelectView
           roomCode={roomCode}
           topicText={topicText}
-          candidates={roomSnapshot.firstWordCandidates}
           isHost={isHost}
+          candidates={snapshot.firstWordCandidates}
           isSelecting={isSelectingFirstWord}
           errorMessage={errorMessage}
           onSelectCandidate={selectFirstWord}
@@ -673,7 +780,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
     );
   }
 
-  if (roomSnapshot.game.status === "player_input") {
+  if (snapshot.game.status === "player_input") {
     return (
       <div className="relative min-h-screen">
         {showEndButton && (
@@ -704,7 +811,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
     );
   }
 
-  if (roomSnapshot.game.status === "host_select") {
+  if (snapshot.game.status === "host_select") {
     return (
       <div className="relative min-h-screen">
         {showEndButton && (
@@ -722,24 +829,40 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
           roomCode={roomCode}
           topicText={topicText}
           currentWord={currentWord}
-          submissionWord={roomSnapshot.submission?.word ?? null}
+          submissionWord={currentRoundSubmission?.word ?? null}
           submissionPlayerName={currentSubmissionPlayerName}
           isHost={isHost}
           errorMessage={errorMessage}
           isResolvingSelection={isResolvingSelection}
-          onChooseCurrentWord={() => resolveHostSelection(null)}
-          onChooseSubmission={() =>
-            resolveHostSelection(roomSnapshot.submission?.word ?? null)
-          }
+          onChooseCurrentWord={() => resolveHostSelection(true)}
+          onChooseSubmission={() => resolveHostSelection(false)}
         />
       </div>
+    );
+  }
+
+  if (snapshot.game.status === "topic_result") {
+    return (
+      <TopicResultView
+        roomCode={roomCode}
+        topicText={topicText}
+        initialWord={snapshot.game.initial_word ?? "未選択"}
+        finalWord={snapshot.game.current_word ?? "未選択"}
+        entries={topicResultEntries}
+        isHost={isHost}
+        isProceeding={isAdvancingTopic || isFinishingGame}
+        errorMessage={errorMessage}
+        onNextTopic={advanceToNextTopic}
+        onFinishGame={finishGame}
+      />
     );
   }
 
   return (
     <FinishedView
       roomCode={roomCode}
-      finalWord={currentWord}
+      topicText={topicText}
+      finalWord={snapshot.game.current_word ?? "未選択"}
       onReturnToRoom={leaveRoom}
     />
   );

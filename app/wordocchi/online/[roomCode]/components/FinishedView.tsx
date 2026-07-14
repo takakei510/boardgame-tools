@@ -1,11 +1,13 @@
 type FinishedViewProps = {
   roomCode: string;
+  topicText: string;
   finalWord: string;
   onReturnToRoom: () => void;
 };
 
 export default function FinishedView({
   roomCode,
+  topicText,
   finalWord,
   onReturnToRoom,
 }: FinishedViewProps) {
@@ -21,6 +23,8 @@ export default function FinishedView({
             <p className="mt-1 text-2xl font-bold tracking-[0.4em] text-gray-900">
               {roomCode}
             </p>
+            <p className="mt-4 text-sm font-semibold text-orange-700">今回のお題</p>
+            <p className="mt-2 text-2xl font-bold text-gray-900">{topicText}</p>
             <p className="mt-4 text-sm font-semibold text-orange-700">最終ワード</p>
             <p className="mt-2 text-3xl font-bold text-gray-900">{finalWord}</p>
           </div>

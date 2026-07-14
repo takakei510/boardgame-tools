@@ -5,6 +5,7 @@ export type GameStatus =
   | "select_first_word"
   | "player_input"
   | "host_select"
+  | "topic_result"
   | "finished";
 
 export type FirstWordCandidate = {
@@ -32,6 +33,7 @@ export type SubmissionRow = {
   player_id: string;
   word: string;
   round_number: number;
+  topic_round: number;
   selected: boolean;
   created_at: string;
 };
@@ -42,11 +44,26 @@ export type GameRow = {
   game_type: string;
   status: GameStatus;
   topic_id: number | null;
+  topic_round: number;
+  initial_word: string | null;
   current_word: string | null;
   current_player_id: string | null;
   round_number: number;
   created_at: string;
   first_word_candidates: unknown;
+  used_topic_ids: unknown;
+};
+
+export type GameStartPayload = {
+  topicId: number;
+  firstWordCandidates: FirstWordCandidate[];
+  usedTopicIds: number[];
+};
+
+export type StartNextTopicPayload = {
+  topicId: number;
+  firstWordCandidates: FirstWordCandidate[];
+  usedTopicIds: number[];
 };
 
 export const normalizeFirstWordCandidates = (
@@ -79,6 +96,16 @@ export const normalizeFirstWordCandidates = (
     .filter((candidate): candidate is FirstWordCandidate => candidate !== null);
 };
 
+export const normalizeNumericJsonArray = (value: unknown): number[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => Number(item))
+    .filter((item) => Number.isFinite(item));
+};
+
 const shuffleArray = <T,>(items: readonly T[]): T[] => {
   const shuffled = [...items];
 
@@ -98,28 +125,165 @@ const pickUniqueItems = <T,>(items: readonly T[], count: number): T[] => {
   return shuffleArray(items).slice(0, count);
 };
 
-export const buildGameStartPayload = (
-  topics: readonly WordocchiTopic[],
+export const pickRandomWords = (
   words: readonly WordocchiWord[],
+  count = 3,
+): FirstWordCandidate[] => {
+  return pickUniqueItems(words, count).map((word) => ({
+    id: word.id,
+    text: word.text,
+  }));
+};
+
+export const pickUnusedTopic = (
+  topics: readonly WordocchiTopic[],
+  usedTopicIds: unknown,
 ) => {
-  if (topics.length === 0) {
+  const normalizedUsedTopicIds = [...new Set(normalizeNumericJsonArray(usedTopicIds))];
+  const unusedTopics = topics.filter(
+    (topic) => !normalizedUsedTopicIds.includes(topic.id),
+  );
+  const sourceTopics = unusedTopics.length > 0 ? unusedTopics : topics;
+  const [topic] = pickUniqueItems(sourceTopics, 1);
+
+  if (!topic) {
     throw new Error("お題が見つかりませんでした。");
   }
+
+  const nextUsedTopicIds =
+    unusedTopics.length > 0 ? [...normalizedUsedTopicIds, topic.id] : [topic.id];
+
+  return {
+    topic,
+    usedTopicIds: nextUsedTopicIds,
+  };
+};
+
+export const startGame = (
+  topics: readonly WordocchiTopic[],
+  words: readonly WordocchiWord[],
+) : GameStartPayload => {
+  const { topic, usedTopicIds } = pickUnusedTopic(topics, []);
 
   if (words.length < 3) {
     throw new Error("最初のワード候補が不足しています。");
   }
 
-  const [topic] = pickUniqueItems(topics, 1);
+  return {
+    topicId: topic.id,
+    firstWordCandidates: pickRandomWords(words, 3),
+    usedTopicIds,
+  };
+};
+
+export const selectFirstWord = (
+  firstWord: FirstWordCandidate,
+  firstAnsweringPlayer: PlayerRow | null,
+) => {
+  if (!firstAnsweringPlayer) {
+    throw new Error("回答する子プレイヤーが見つかりませんでした。");
+  }
+
+  return {
+    initial_word: firstWord.text,
+    current_word: firstWord.text,
+    current_player_id: firstAnsweringPlayer.id,
+    round_number: 1,
+    status: "player_input" as const,
+  };
+};
+
+export const submitWord = (
+  gameId: string,
+  playerId: string,
+  word: string,
+  roundNumber: number,
+  topicRound: number,
+) => ({
+  game_id: gameId,
+  player_id: playerId,
+  word,
+  round_number: roundNumber,
+  topic_round: topicRound,
+  selected: false,
+});
+
+export const getNextUnansweredPlayer = (
+  players: PlayerRow[],
+  submissions: SubmissionRow[],
+  topicRound: number,
+): PlayerRow | null => {
+  const childPlayers = [...players]
+    .filter((player) => !player.is_host)
+    .sort((left, right) => left.join_order - right.join_order);
+
+  const answeredPlayerIds = new Set(
+    submissions
+      .filter((submission) => submission.topic_round === topicRound)
+      .map((submission) => submission.player_id),
+  );
+
+  return (
+    childPlayers.find((player) => !answeredPlayerIds.has(player.id)) ?? null
+  );
+};
+
+export const selectWinningWord = (
+  selectedSubmission: SubmissionRow | null,
+  currentWord: string | null,
+  nextPlayer: PlayerRow | null,
+  nextRoundNumber: number,
+) => {
+  if (nextPlayer) {
+    return {
+      current_word: selectedSubmission?.word ?? currentWord,
+      current_player_id: nextPlayer.id,
+      round_number: nextRoundNumber,
+      status: "player_input" as const,
+    };
+  }
+
+  return {
+    current_word: selectedSubmission?.word ?? currentWord,
+    current_player_id: null,
+    round_number: nextRoundNumber,
+    status: "topic_result" as const,
+  };
+};
+
+export const startNextTopic = (
+  topics: readonly WordocchiTopic[],
+  words: readonly WordocchiWord[],
+  usedTopicIds: unknown,
+  currentTopicId: number | null,
+  currentTopicRound: number,
+) => {
+  const nextUsedTopicIds =
+    currentTopicId === null
+      ? normalizeNumericJsonArray(usedTopicIds)
+      : [...normalizeNumericJsonArray(usedTopicIds), currentTopicId];
+
+  const { topic, usedTopicIds: normalizedUsedTopicIds } = pickUnusedTopic(
+    topics,
+    nextUsedTopicIds,
+  );
 
   return {
     topicId: topic.id,
-    firstWordCandidates: pickUniqueItems(words, 3).map((word) => ({
-      id: word.id,
-      text: word.text,
-    })),
+    firstWordCandidates: pickRandomWords(words, 3),
+    usedTopicIds: normalizedUsedTopicIds,
+    initial_word: null as string | null,
+    current_word: null as string | null,
+    current_player_id: null as string | null,
+    round_number: 0,
+    topic_round: currentTopicRound + 1,
+    status: "select_first_word" as const,
   };
 };
+
+export const finishGame = () => ({
+  status: "finished" as const,
+});
 
 export const getFirstAnsweringPlayer = (
   players: PlayerRow[],
@@ -173,4 +337,13 @@ export const findSubmissionForRound = (
     });
 
   return submission ?? null;
+};
+
+export const getSubmissionsForTopicRound = (
+  submissions: SubmissionRow[],
+  topicRound: number,
+) => {
+  return [...submissions]
+    .filter((submission) => submission.topic_round === topicRound)
+    .sort((left, right) => left.round_number - right.round_number);
 };
