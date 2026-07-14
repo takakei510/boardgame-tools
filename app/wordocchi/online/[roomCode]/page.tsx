@@ -1,4 +1,4 @@
-import WaitingRoomClient from "./WaitingRoomClient";
+import OnlineRoomClient from "./OnlineRoomClient";
 
 type WaitingRoomPageProps = {
   params: Promise<{
@@ -11,5 +11,5 @@ export default async function WaitingRoomPage({
 }: WaitingRoomPageProps) {
   const { roomCode } = await params;
 
-  return <WaitingRoomClient roomCode={roomCode.toUpperCase()} />;
+  return <OnlineRoomClient roomCode={roomCode.toUpperCase()} />;
 }
