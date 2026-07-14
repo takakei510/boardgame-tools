@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { getPlayerId, clearPlayerSession } from "@/lib/session";
@@ -82,13 +81,15 @@ export default function WaitingRoomClient({
             event: "*",
             schema: "public",
             table: "players",
-            filter: `game_id=eq.${game.id}`,
           },
-          () => {
+          (payload) => {
+            console.log("players変更:", payload);
             fetchPlayers(game.id);
           },
         )
-        .subscribe();
+        .subscribe((status) => {
+          console.log("Realtime status:", status);
+        });
 
       setIsLoading(false);
     };
@@ -115,70 +116,69 @@ export default function WaitingRoomClient({
       console.error("部屋番号のコピーに失敗しました。", error);
     }
   };
-const leaveRoom = async () => {
-  setIsLeaving(true);
-  setErrorMessage("");
+  const leaveRoom = async () => {
+    setIsLeaving(true);
+    setErrorMessage("");
 
-  const playerId = getPlayerId();
+    const playerId = getPlayerId();
 
-  if (!playerId) {
-    clearPlayerSession();
-    router.push("/wordocchi/room");
-    return;
-  }
-
-  try {
-    const { data: currentPlayer, error: fetchError } = await supabase
-      .from("players")
-      .select("id, is_host")
-      .eq("id", playerId)
-      .single();
-
-    if (fetchError || !currentPlayer) {
-      throw new Error(
-        fetchError?.message ?? "プレイヤー情報が見つかりませんでした。",
-      );
+    if (!playerId) {
+      clearPlayerSession();
+      router.push("/wordocchi/room");
+      return;
     }
 
-    if (currentPlayer.is_host) {
-      const { error: deleteGameError } = await supabase
-        .from("games")
-        .delete()
-        .eq("room_code", roomCode);
-
-      if (deleteGameError) {
-        throw new Error(deleteGameError.message);
-      }
-    } else {
-      const { data: deletedPlayer, error: deletePlayerError } = await supabase
+    try {
+      const { data: currentPlayer, error: fetchError } = await supabase
         .from("players")
-        .delete()
+        .select("id, is_host")
         .eq("id", playerId)
-        .select("id")
         .single();
 
-      if (deletePlayerError || !deletedPlayer) {
+      if (fetchError || !currentPlayer) {
         throw new Error(
-          deletePlayerError?.message ??
-            "プレイヤーを削除できませんでした。",
+          fetchError?.message ?? "プレイヤー情報が見つかりませんでした。",
         );
       }
+
+      if (currentPlayer.is_host) {
+        const { error: deleteGameError } = await supabase
+          .from("games")
+          .delete()
+          .eq("room_code", roomCode);
+
+        if (deleteGameError) {
+          throw new Error(deleteGameError.message);
+        }
+      } else {
+        const { data: deletedPlayer, error: deletePlayerError } = await supabase
+          .from("players")
+          .delete()
+          .eq("id", playerId)
+          .select("id")
+          .single();
+
+        if (deletePlayerError || !deletedPlayer) {
+          throw new Error(
+            deletePlayerError?.message ?? "プレイヤーを削除できませんでした。",
+          );
+        }
+      }
+
+      clearPlayerSession();
+      router.push("/wordocchi/room");
+    } catch (error) {
+      console.error("退出エラー:", error);
+
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "部屋から退出できませんでした。",
+      );
+
+      setIsLeaving(false);
     }
-
-    clearPlayerSession();
-    router.push("/wordocchi/room");
-  } catch (error) {
-    console.error("退出エラー:", error);
-
-    setErrorMessage(
-      error instanceof Error
-        ? error.message
-        : "部屋から退出できませんでした。",
-    );
-
-    setIsLeaving(false);
-  }
-};
+  };
 
   return (
     <main className="min-h-screen bg-orange-50 px-6 py-10">
