@@ -29,6 +29,7 @@ import TopicResultView from "./components/TopicResultView";
 import FinishedView from "./components/FinishedView";
 import FinalAnswerView from "./components/FinalAnswerView";
 import FinalSelectView from "./components/FinalSelectView";
+import TransitionOverlay from "./components/TransitionOverlay";
 
 type RoomSnapshot = {
   game: GameRow;
@@ -68,6 +69,28 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
   const [finalAnswerDraft, setFinalAnswerDraft] = useState("");
   const [isSubmittingFinalAnswer, setIsSubmittingFinalAnswer] = useState(false);
   const [isSelectingFinalAnswer, setIsSelectingFinalAnswer] = useState(false);
+
+  const isTransitioning =
+    isStartingGame ||
+    isSelectingFirstWord ||
+    isResolvingSelection ||
+    isAdvancingTopic ||
+    isFinishingGame ||
+    isSelectingFinalAnswer;
+
+  const transitionMessage = isStartingGame
+    ? "ゲームを開始しています..."
+    : isSelectingFirstWord
+      ? "最初のワードを決定しています..."
+      : isResolvingSelection
+        ? "次の回答者へ進んでいます..."
+        : isSelectingFinalAnswer
+          ? "最終回答を決定しています..."
+          : isAdvancingTopic
+            ? "次のお題を準備しています..."
+            : isFinishingGame
+              ? "ゲームを終了しています..."
+              : "次の画面を準備しています...";
 
   const updateAnswerCycles = async (value: number) => {
     if (!roomSnapshot || !isHost || isUpdatingCycles) {
@@ -1231,20 +1254,26 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
   }
   if (snapshot.game.status === "topic_result") {
     return (
-      <TopicResultView
-        roomCode={roomCode}
-        topicText={topicText}
-        initialWord={snapshot.game.initial_word ?? "未選択"}
-        finalWord={snapshot.game.current_word ?? "未選択"}
-        entries={topicResultEntries}
-        isHost={isHost}
-        isProceeding={isAdvancingTopic || isFinishingGame}
-        errorMessage={errorMessage}
-        onNextTopic={advanceToNextTopic}
-        onFinishGame={finishGame}
-        selectedFinalWord={selectedFinalSubmission?.word ?? null}
-        selectedFinalPlayerName={selectedFinalPlayer?.name ?? null}
-      />
+      <>
+        <TopicResultView
+          roomCode={roomCode}
+          topicText={topicText}
+          initialWord={snapshot.game.initial_word ?? "未選択"}
+          finalWord={snapshot.game.current_word ?? "未選択"}
+          entries={topicResultEntries}
+          isHost={isHost}
+          isProceeding={isAdvancingTopic || isFinishingGame}
+          errorMessage={errorMessage}
+          onNextTopic={advanceToNextTopic}
+          onFinishGame={finishGame}
+          selectedFinalWord={selectedFinalSubmission?.word ?? null}
+          selectedFinalPlayerName={selectedFinalPlayer?.name ?? null}
+        />
+        <TransitionOverlay
+          visible={isTransitioning}
+          message={transitionMessage}
+        />
+      </>
     );
   }
 
