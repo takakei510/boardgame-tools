@@ -52,6 +52,8 @@ export type GameRow = {
   created_at: string;
   first_word_candidates: unknown;
   used_topic_ids: unknown;
+  answer_cycles: number;
+  current_cycle: number;
 };
 
 export type GameStartPayload = {

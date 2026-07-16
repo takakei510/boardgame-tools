@@ -8,6 +8,7 @@ type WaitingRoomViewProps = {
   isStarting: boolean;
   copied: boolean;
   errorMessage: string;
+  answerCycles: number;
   onCopyRoomCode: () => void;
   onStartGame: () => void;
   onLeaveRoom: () => void;
@@ -21,6 +22,7 @@ export default function WaitingRoomView({
   isStarting,
   copied,
   errorMessage,
+  answerCycles,
   onCopyRoomCode,
   onStartGame,
   onLeaveRoom,
@@ -97,6 +99,44 @@ export default function WaitingRoomView({
                 </div>
               ))}
             </div>
+          </div>
+
+          <div className="mt-8 rounded-2xl border border-orange-200 bg-orange-50 p-5">
+            <p className="text-sm font-bold text-orange-700">
+              通常回答の周回数
+            </p>
+
+            {isHost ? (
+              <div className="mt-3 flex items-center justify-center gap-5">
+                <button
+                  type="button"
+                  disabled
+                  className="h-11 w-11 rounded-xl border-2 border-orange-300 text-xl font-bold text-orange-400 disabled:cursor-not-allowed"
+                >
+                  −
+                </button>
+
+                <p className="min-w-20 text-center text-2xl font-bold text-gray-900">
+                  {answerCycles}周
+                </p>
+
+                <button
+                  type="button"
+                  disabled
+                  className="h-11 w-11 rounded-xl border-2 border-orange-300 text-xl font-bold text-orange-400 disabled:cursor-not-allowed"
+                >
+                  ＋
+                </button>
+              </div>
+            ) : (
+              <p className="mt-3 text-center text-2xl font-bold text-gray-900">
+                {answerCycles}周
+              </p>
+            )}
+
+            <p className="mt-3 text-center text-sm text-gray-500">
+              各プレイヤーが回答する回数です
+            </p>
           </div>
 
           {isHost ? (
