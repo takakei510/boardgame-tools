@@ -34,6 +34,8 @@ export type SubmissionRow = {
   word: string;
   round_number: number;
   topic_round: number;
+  answer_phase: "normal" | "final";
+  cycle_number: number;
   selected: boolean;
   created_at: string;
 };
@@ -201,12 +203,15 @@ export const submitWord = (
   word: string,
   roundNumber: number,
   topicRound: number,
+  cycleNumber: number,
 ) => ({
   game_id: gameId,
   player_id: playerId,
   word,
   round_number: roundNumber,
   topic_round: topicRound,
+  answer_phase: "normal" as const,
+  cycle_number: cycleNumber,
   selected: false,
 });
 
@@ -214,6 +219,7 @@ export const getNextUnansweredPlayer = (
   players: PlayerRow[],
   submissions: SubmissionRow[],
   topicRound: number,
+  currentCycle: number,
 ): PlayerRow | null => {
   const childPlayers = [...players]
     .filter((player) => !player.is_host)
@@ -221,7 +227,12 @@ export const getNextUnansweredPlayer = (
 
   const answeredPlayerIds = new Set(
     submissions
-      .filter((submission) => submission.topic_round === topicRound)
+      .filter(
+        (submission) =>
+          submission.topic_round === topicRound &&
+          submission.answer_phase === "normal" &&
+          submission.cycle_number === currentCycle,
+      )
       .map((submission) => submission.player_id),
   );
 

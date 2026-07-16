@@ -13,7 +13,6 @@ import {
   getSubmissionsForTopicRound,
   normalizeFirstWordCandidates,
   selectFirstWord as buildFirstWordPayload,
-  selectWinningWord as buildWinningWordPayload,
   startGame as buildStartGamePayload,
   startNextTopic as buildNextTopicPayload,
   submitWord as buildSubmissionPayload,
@@ -159,7 +158,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
       const { data: submissions, error: submissionsError } = await supabase
         .from("submissions")
         .select(
-          "id, game_id, player_id, word, round_number, topic_round, selected, created_at",
+          "id, game_id, player_id, word, round_number, topic_round, answer_phase, cycle_number, selected, created_at",
         )
         .eq("game_id", game.id)
         .eq("topic_round", game.topic_round)
@@ -403,6 +402,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
           initial_word: null,
           current_word: null,
           current_player_id: null,
+          current_cycle: 1,
           round_number: 0,
           topic_round: 1,
           status: "select_first_word",
@@ -486,10 +486,12 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
       roomSnapshot.submissions.some(
         (submission) =>
           submission.player_id === playerId &&
-          submission.topic_round === roomSnapshot.game.topic_round,
+          submission.topic_round === roomSnapshot.game.topic_round &&
+          submission.answer_phase === "normal" &&
+          submission.cycle_number === roomSnapshot.game.current_cycle,
       )
     ) {
-      setErrorMessage("このお題にはすでに回答しています。");
+      setErrorMessage("この周回にはすでに回答しています。");
       return;
     }
 
@@ -503,6 +505,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
         trimmedAnswer,
         roomSnapshot.game.round_number,
         roomSnapshot.game.topic_round,
+        roomSnapshot.game.current_cycle,
       );
 
       const { error: insertError } = await supabase
@@ -511,7 +514,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
 
       if (insertError) {
         if (insertError.code === "23505") {
-          throw new Error("このお題にはすでに回答しています。");
+          throw new Error("この周回にはすでに回答しています。");
         }
 
         throw new Error(insertError.message);
@@ -546,6 +549,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
       roomSnapshot.players,
       roomSnapshot.submissions,
       roomSnapshot.game.topic_round,
+      roomSnapshot.game.current_cycle,
     );
 
     const selectedSubmission = selectedCurrentWord
@@ -567,16 +571,58 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
         }
       }
 
-      const payload = buildWinningWordPayload(
-        selectedSubmission,
-        roomSnapshot.game.current_word,
-        nextPlayer,
-        roomSnapshot.game.round_number + 1,
-      );
+      const nextCurrentWord =
+        selectedSubmission?.word ?? roomSnapshot.game.current_word;
+      if (nextPlayer) {
+        const { error: gameError } = await supabase
+          .from("games")
+          .update({
+            current_word: nextCurrentWord,
+            current_player_id: nextPlayer.id,
+            round_number: roomSnapshot.game.round_number + 1,
+            status: "player_input",
+          })
+          .eq("id", roomSnapshot.game.id);
+
+        if (gameError) {
+          throw new Error(gameError.message);
+        }
+
+        return;
+      }
+
+      if (roomSnapshot.game.current_cycle < roomSnapshot.game.answer_cycles) {
+        const firstPlayer = getFirstAnsweringPlayer(roomSnapshot.players);
+
+        if (!firstPlayer) {
+          throw new Error("次の周回で回答するプレイヤーが見つかりません。");
+        }
+
+        const { error: gameError } = await supabase
+          .from("games")
+          .update({
+            current_word: nextCurrentWord,
+            current_cycle: roomSnapshot.game.current_cycle + 1,
+            current_player_id: firstPlayer.id,
+            round_number: roomSnapshot.game.round_number + 1,
+            status: "player_input",
+          })
+          .eq("id", roomSnapshot.game.id);
+
+        if (gameError) {
+          throw new Error(gameError.message);
+        }
+
+        return;
+      }
 
       const { error: gameError } = await supabase
         .from("games")
-        .update(payload)
+        .update({
+          current_word: nextCurrentWord,
+          current_player_id: null,
+          status: "topic_result",
+        })
         .eq("id", roomSnapshot.game.id);
 
       if (gameError) {
@@ -620,6 +666,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
           initial_word: payload.initial_word,
           current_word: payload.current_word,
           current_player_id: payload.current_player_id,
+          current_cycle: 1,
           round_number: payload.round_number,
           topic_round: payload.topic_round,
           status: payload.status,
@@ -818,7 +865,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
           updateAnswerCycles(roomSnapshot.game.answer_cycles + 1)
         }
         onDecrease={() =>
-        updateAnswerCycles(roomSnapshot.game.answer_cycles - 1)
+          updateAnswerCycles(roomSnapshot.game.answer_cycles - 1)
         }
         isUpdatingCycles={isUpdatingCycles}
       />
