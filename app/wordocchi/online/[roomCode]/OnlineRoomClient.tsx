@@ -666,7 +666,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
     if (
       !roomSnapshot ||
       !playerId ||
-      !isRoomHost ||
+      isParent ||
       roomSnapshot.game.status !== "final_input" ||
       hasSubmittedFinalAnswer ||
       isSubmittingFinalAnswer
@@ -861,7 +861,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
       if (roomSnapshot.game.current_cycle < roomSnapshot.game.answer_cycles) {
         const firstPlayer = getFirstAnsweringPlayer(
           roomSnapshot.players,
-          roomSnapshot.game.parent_player_id
+          roomSnapshot.game.parent_player_id,
         );
 
         if (!firstPlayer) {
@@ -1236,7 +1236,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
         roomCode={roomCode}
         topicText={roomSnapshot.topicText}
         finalWord={roomSnapshot.game.current_word ?? ""}
-        isHost={isRoomHost}
+        isHost={isParent}
         answerDraft={finalAnswerDraft}
         hasSubmitted={hasSubmittedFinalAnswer}
         submittedCount={finalSubmissions.length}
@@ -1256,7 +1256,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
         initialWord={roomSnapshot.game.initial_word ?? ""}
         finalWord={roomSnapshot.game.current_word ?? ""}
         finalSubmissions={finalSubmissions}
-        isHost={isRoomHost}
+        isHost={isParent}
         isSelecting={isSelectingFinalAnswer}
         errorMessage={errorMessage}
         onSelect={selectFinalAnswer}
@@ -1272,7 +1272,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
           initialWord={snapshot.game.initial_word ?? "未選択"}
           finalWord={snapshot.game.current_word ?? "未選択"}
           entries={topicResultEntries}
-          isHost={isRoomHost}
+          isHost={isParent}
           isProceeding={isAdvancingTopic || isFinishingGame}
           errorMessage={errorMessage}
           onNextTopic={advanceToNextTopic}
