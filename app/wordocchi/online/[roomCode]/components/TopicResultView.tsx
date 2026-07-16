@@ -16,6 +16,8 @@ type TopicResultViewProps = {
   errorMessage: string;
   onNextTopic: () => void;
   onFinishGame: () => void;
+  selectedFinalWord: string | null;
+  selectedFinalPlayerName: string | null;
 };
 
 export default function TopicResultView({
@@ -29,6 +31,8 @@ export default function TopicResultView({
   errorMessage,
   onNextTopic,
   onFinishGame,
+  selectedFinalWord,
+  selectedFinalPlayerName
 }: TopicResultViewProps) {
   return (
     <main className="min-h-screen bg-orange-50 px-6 py-10">
@@ -44,6 +48,21 @@ export default function TopicResultView({
             </p>
             <p className="mt-4 text-sm font-semibold text-orange-700">今回のお題</p>
             <p className="mt-2 text-2xl font-bold text-gray-900">{topicText}</p>
+            <div className="mt-8 rounded-3xl border-2 border-orange-400 bg-orange-50 p-6">
+              <p className="text-sm font-bold text-orange-600">
+                選ばれた最終回答
+              </p>
+
+              <p className="mt-2 text-3xl font-black text-gray-900">
+                {selectedFinalWord ?? "選択された回答がありません"}
+              </p>
+
+              {selectedFinalPlayerName && (
+                <p className="mt-3 text-sm font-bold text-gray-600">
+                  回答者：{selectedFinalPlayerName}
+                </p>
+              )}
+            </div>
             <p className="mt-4 text-sm font-semibold text-orange-700">最初のワード</p>
             <p className="mt-2 text-2xl font-bold text-gray-900">{initialWord}</p>
             <p className="mt-4 text-sm font-semibold text-orange-700">最終ワード</p>

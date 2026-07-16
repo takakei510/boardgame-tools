@@ -495,6 +495,22 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
     }
   };
 
+  const selectedFinalSubmission = useMemo(() => {
+    return finalSubmissions.find((submission) => submission.selected) ?? null;
+  }, [finalSubmissions]);
+
+  const selectedFinalPlayer = useMemo(() => {
+    if (!selectedFinalSubmission || !roomSnapshot) {
+      return null;
+    }
+
+    return (
+      roomSnapshot.players.find(
+        (player) => player.id === selectedFinalSubmission.player_id,
+      ) ?? null
+    );
+  }, [roomSnapshot, selectedFinalSubmission]);
+
   const submitAnswer = async () => {
     if (
       !roomSnapshot ||
@@ -574,6 +590,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
       setIsSubmittingAnswer(false);
     }
   };
+
   const submitFinalAnswer = async () => {
     if (
       !roomSnapshot ||
@@ -663,6 +680,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
       setIsSubmittingFinalAnswer(false);
     }
   };
+
   const selectFinalAnswer = async (submission: SubmissionRow) => {
     if (
       !roomSnapshot ||
@@ -716,6 +734,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
       setIsSelectingFinalAnswer(false);
     }
   };
+
   const resolveHostSelection = async (selectedCurrentWord: boolean) => {
     if (!roomSnapshot || !isHost || isResolvingSelection) {
       return;
@@ -1181,6 +1200,8 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
         errorMessage={errorMessage}
         onNextTopic={advanceToNextTopic}
         onFinishGame={finishGame}
+        selectedFinalWord={selectedFinalSubmission?.word ?? null}
+        selectedFinalPlayerName={selectedFinalPlayer?.name ?? null}
       />
     );
   }
