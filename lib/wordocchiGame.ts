@@ -5,6 +5,8 @@ export type GameStatus =
   | "select_first_word"
   | "player_input"
   | "host_select"
+  | "final_input"
+  | "final_select"
   | "topic_result"
   | "finished";
 

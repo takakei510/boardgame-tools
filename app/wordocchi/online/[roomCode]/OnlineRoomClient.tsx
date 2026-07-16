@@ -27,6 +27,7 @@ import PlayerInputView from "./components/PlayerInputView";
 import HostSelectView from "./components/HostSelectView";
 import TopicResultView from "./components/TopicResultView";
 import FinishedView from "./components/FinishedView";
+import FinalAnswerView from "./components/FinalAnswerView";
 
 type RoomSnapshot = {
   game: GameRow;
@@ -63,6 +64,8 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
   const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
   const [answerDraft, setAnswerDraft] = useState("");
   const [isUpdatingCycles, setIsUpdatingCycles] = useState(false);
+  const [finalAnswerDraft, setFinalAnswerDraft] = useState("");
+  const [isSubmittingFinalAnswer, setIsSubmittingFinalAnswer] = useState(false);
 
   const updateAnswerCycles = async (value: number) => {
     if (!roomSnapshot || isUpdatingCycles) {
@@ -369,6 +372,36 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
     );
   }, [playerId, roomSnapshot]);
 
+  const childPlayers = useMemo(() => {
+    if (!roomSnapshot) {
+      return [];
+    }
+
+    return roomSnapshot.players.filter((player) => !player.is_host);
+  }, [roomSnapshot]);
+
+  const finalSubmissions = useMemo(() => {
+    if (!roomSnapshot) {
+      return [];
+    }
+
+    return roomSnapshot.submissions.filter(
+      (submission) =>
+        submission.topic_round === roomSnapshot.game.topic_round &&
+        submission.answer_phase === "final",
+    );
+  }, [roomSnapshot]);
+
+  const hasSubmittedFinalAnswer = useMemo(() => {
+    if (!playerId) {
+      return false;
+    }
+
+    return finalSubmissions.some(
+      (submission) => submission.player_id === playerId,
+    );
+  }, [finalSubmissions, playerId]);
+
   const copyRoomCode = async () => {
     try {
       await navigator.clipboard.writeText(roomCode);
@@ -539,6 +572,95 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
       setIsSubmittingAnswer(false);
     }
   };
+  const submitFinalAnswer = async () => {
+    if (
+      !roomSnapshot ||
+      !playerId ||
+      isHost ||
+      roomSnapshot.game.status !== "final_input" ||
+      hasSubmittedFinalAnswer ||
+      isSubmittingFinalAnswer
+    ) {
+      return;
+    }
+
+    const trimmedAnswer = finalAnswerDraft.trim();
+
+    if (trimmedAnswer.length < 1 || trimmedAnswer.length > 50) {
+      setErrorMessage("最終回答は1〜50文字で入力してください。");
+      return;
+    }
+
+    setIsSubmittingFinalAnswer(true);
+    setErrorMessage("");
+
+    try {
+      const { error: insertError } = await supabase.from("submissions").insert({
+        game_id: roomSnapshot.game.id,
+        player_id: playerId,
+        word: trimmedAnswer,
+        round_number: roomSnapshot.game.round_number + 1,
+        topic_round: roomSnapshot.game.topic_round,
+        answer_phase: "final",
+        cycle_number: roomSnapshot.game.current_cycle,
+        selected: false,
+      });
+
+      if (insertError) {
+        if (insertError.code === "23505") {
+          throw new Error("最終回答はすでに送信しています。");
+        }
+
+        throw new Error(insertError.message);
+      }
+
+      setFinalAnswerDraft("");
+
+      const { data: submittedAnswers, error: fetchError } = await supabase
+        .from("submissions")
+        .select("player_id")
+        .eq("game_id", roomSnapshot.game.id)
+        .eq("topic_round", roomSnapshot.game.topic_round)
+        .eq("answer_phase", "final");
+
+      if (fetchError) {
+        throw new Error(fetchError.message);
+      }
+
+      const submittedPlayerIds = new Set(
+        (submittedAnswers ?? []).map((answer) => answer.player_id),
+      );
+
+      const allPlayersSubmitted = childPlayers.every((player) =>
+        submittedPlayerIds.has(player.id),
+      );
+
+      if (allPlayersSubmitted) {
+        const { error: gameError } = await supabase
+          .from("games")
+          .update({
+            status: "final_select",
+            current_player_id: null,
+          })
+          .eq("id", roomSnapshot.game.id)
+          .eq("status", "final_input");
+
+        if (gameError) {
+          throw new Error(gameError.message);
+        }
+      }
+    } catch (error) {
+      console.error("最終回答送信エラー:", error);
+
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "最終回答の送信に失敗しました。",
+      );
+    } finally {
+      setIsSubmittingFinalAnswer(false);
+    }
+  };
 
   const resolveHostSelection = async (selectedCurrentWord: boolean) => {
     if (!roomSnapshot || !isHost || isResolvingSelection) {
@@ -621,7 +743,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
         .update({
           current_word: nextCurrentWord,
           current_player_id: null,
-          status: "topic_result",
+          status: "final_input",
         })
         .eq("id", roomSnapshot.game.id);
 
@@ -959,7 +1081,24 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
       </div>
     );
   }
-
+  if (roomSnapshot.game.status === "final_input") {
+    return (
+      <FinalAnswerView
+        roomCode={roomCode}
+        topicText={roomSnapshot.topicText}
+        finalWord={roomSnapshot.game.current_word ?? ""}
+        isHost={isHost}
+        answerDraft={finalAnswerDraft}
+        hasSubmitted={hasSubmittedFinalAnswer}
+        submittedCount={finalSubmissions.length}
+        totalPlayers={childPlayers.length}
+        isSubmitting={isSubmittingFinalAnswer}
+        errorMessage={errorMessage}
+        onAnswerChange={setFinalAnswerDraft}
+        onSubmit={submitFinalAnswer}
+      />
+    );
+  }
   if (snapshot.game.status === "topic_result") {
     return (
       <TopicResultView
