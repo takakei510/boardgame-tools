@@ -30,9 +30,7 @@ export default function FinalAnswerView({
   return (
     <main className="min-h-screen bg-orange-50 px-6 py-10">
       <div className="mx-auto max-w-3xl rounded-3xl bg-white p-8 shadow-sm">
-        <p className="text-sm font-bold text-orange-600">
-          オンラインプレイ
-        </p>
+        <p className="text-sm font-bold text-orange-600">オンラインプレイ</p>
 
         <h1 className="mt-2 text-3xl font-black text-gray-900">
           最終回答タイム
@@ -44,19 +42,19 @@ export default function FinalAnswerView({
             {roomCode}
           </p>
 
-          <p className="mt-6 text-sm font-bold text-orange-600">
-            今回のお題
-          </p>
-          <p className="mt-1 text-xl font-bold text-gray-900">
-            {topicText}
-          </p>
+          {isHost && (
+            <>
+              <p className="mt-6 text-sm font-bold text-orange-600">
+                今回のお題
+              </p>
+              <p className="mt-1 text-xl font-bold text-gray-900">
+                {topicText}
+              </p>
+            </>
+          )}
 
-          <p className="mt-6 text-sm font-bold text-orange-600">
-            最終ワード
-          </p>
-          <p className="mt-1 text-3xl font-black text-gray-900">
-            {finalWord}
-          </p>
+          <p className="mt-6 text-sm font-bold text-orange-600">最終ワード</p>
+          <p className="mt-1 text-3xl font-black text-gray-900">{finalWord}</p>
         </div>
 
         <div className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-5">
