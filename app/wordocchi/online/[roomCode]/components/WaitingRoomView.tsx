@@ -31,7 +31,7 @@ export default function WaitingRoomView({
   onLeaveRoom,
   onIncrease,
   onDecrease,
-  isUpdatingCycles
+  isUpdatingCycles,
 }: WaitingRoomViewProps) {
   const maxPlayers = 8;
 
@@ -118,7 +118,7 @@ export default function WaitingRoomView({
                   type="button"
                   onClick={onDecrease}
                   disabled={answerCycles <= 1 || isUpdatingCycles}
-                  className="h-11 w-11 rounded-xl border-2 border-orange-300 text-xl font-bold text-orange-400 disabled:cursor-not-allowed"
+                  className="h-11 w-11 rounded-xl border-2 border-orange-300 text-xl font-bold text-orange-600 transition hover:bg-orange-100 disabled:cursor-default disabled:opacity-40"
                 >
                   −
                 </button>
@@ -131,7 +131,7 @@ export default function WaitingRoomView({
                   type="button"
                   onClick={onIncrease}
                   disabled={isUpdatingCycles}
-                  className="h-11 w-11 rounded-xl border-2 border-orange-300 text-xl font-bold text-orange-400 disabled:cursor-not-allowed"
+                  className="h-11 w-11 rounded-xl border-2 border-orange-300 text-xl font-bold text-orange-600 transition hover:bg-orange-100 disabled:cursor-default disabled:opacity-40"
                 >
                   ＋
                 </button>
@@ -152,7 +152,7 @@ export default function WaitingRoomView({
               type="button"
               onClick={onStartGame}
               disabled={!canStart || isStarting}
-              className="mt-8 w-full rounded-2xl bg-orange-500 px-6 py-4 text-lg font-bold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-gray-300"
+              className="mt-8 w-full rounded-2xl bg-orange-500 px-6 py-4 text-lg font-bold text-white transition hover:bg-orange-600 disabled:cursor-default disabled:bg-gray-300"
             >
               {isStarting ? "ゲームを開始中..." : "ゲームを開始する"}
             </button>

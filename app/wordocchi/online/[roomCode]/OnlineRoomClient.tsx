@@ -70,27 +70,69 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
   const [isSelectingFinalAnswer, setIsSelectingFinalAnswer] = useState(false);
 
   const updateAnswerCycles = async (value: number) => {
-    if (!roomSnapshot || isUpdatingCycles) {
+    if (!roomSnapshot || !isHost || isUpdatingCycles) {
       return;
     }
 
     const nextValue = Math.max(1, Math.min(5, value));
+    const previousValue = roomSnapshot.game.answer_cycles;
 
-    setIsUpdatingCycles(true);
-
-    const { error } = await supabase
-      .from("games")
-      .update({
-        answer_cycles: nextValue,
-      })
-      .eq("id", roomSnapshot.game.id)
-      .eq("status", "waiting");
-
-    if (error) {
-      console.error(error);
+    if (nextValue === previousValue) {
+      return;
     }
 
-    setIsUpdatingCycles(false);
+    // 押した瞬間に画面へ反映
+    setRoomSnapshot((previousSnapshot) => {
+      if (!previousSnapshot) {
+        return previousSnapshot;
+      }
+
+      return {
+        ...previousSnapshot,
+        game: {
+          ...previousSnapshot.game,
+          answer_cycles: nextValue,
+        },
+      };
+    });
+
+    setIsUpdatingCycles(true);
+    setErrorMessage("");
+
+    try {
+      const { error } = await supabase
+        .from("games")
+        .update({
+          answer_cycles: nextValue,
+        })
+        .eq("id", roomSnapshot.game.id)
+        .eq("status", "waiting");
+
+      if (error) {
+        throw new Error(error.message);
+      }
+    } catch (error) {
+      console.error("周回数更新エラー:", error);
+
+      // 失敗した場合だけ元の値に戻す
+      setRoomSnapshot((previousSnapshot) => {
+        if (!previousSnapshot) {
+          return previousSnapshot;
+        }
+
+        return {
+          ...previousSnapshot,
+          game: {
+            ...previousSnapshot.game,
+            answer_cycles: previousValue,
+          },
+        };
+      });
+
+      setErrorMessage("周回数の変更に失敗しました。");
+    } finally {
+      setIsUpdatingCycles(false);
+    }
   };
 
   const clearAndLeave = useCallback(
