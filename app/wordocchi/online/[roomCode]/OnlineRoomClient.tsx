@@ -93,7 +93,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
               : "次の画面を準備しています...";
 
   const updateAnswerCycles = async (value: number) => {
-    if (!roomSnapshot || !isHost || isUpdatingCycles) {
+    if (!roomSnapshot || !isParent || isUpdatingCycles) {
       return;
     }
 
@@ -445,7 +445,9 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
       return [];
     }
 
-    return roomSnapshot.players.filter((player) => !player.is_host);
+    return roomSnapshot.players.filter(
+      (player) => player.id !== roomSnapshot.game.parent_player_id,
+    );
   }, [roomSnapshot]);
 
   const finalSubmissions = useMemo(() => {
@@ -484,7 +486,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
   };
 
   const startGame = async () => {
-    if (!roomSnapshot || !isHost || isStartingGame || !canStart) {
+    if (!roomSnapshot || !isRoomHost || isStartingGame || !canStart) {
       return;
     }
 
@@ -524,11 +526,14 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
   };
 
   const selectFirstWord = async (candidate: FirstWordCandidate) => {
-    if (!roomSnapshot || !isHost || isSelectingFirstWord) {
+    if (!roomSnapshot || !isRoomHost || isSelectingFirstWord) {
       return;
     }
 
-    const firstAnsweringPlayer = getFirstAnsweringPlayer(roomSnapshot.players);
+    const firstAnsweringPlayer = getFirstAnsweringPlayer(
+      roomSnapshot.players,
+      roomSnapshot.game.parent_player_id,
+    );
 
     if (!firstAnsweringPlayer) {
       setErrorMessage("回答する子プレイヤーが見つかりませんでした。");
@@ -661,7 +666,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
     if (
       !roomSnapshot ||
       !playerId ||
-      isHost ||
+      !isRoomHost ||
       roomSnapshot.game.status !== "final_input" ||
       hasSubmittedFinalAnswer ||
       isSubmittingFinalAnswer
@@ -750,7 +755,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
   const selectFinalAnswer = async (submission: SubmissionRow) => {
     if (
       !roomSnapshot ||
-      !isHost ||
+      !isRoomHost ||
       roomSnapshot.game.status !== "final_select" ||
       submission.answer_phase !== "final" ||
       isSelectingFinalAnswer
@@ -802,7 +807,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
   };
 
   const resolveHostSelection = async (selectedCurrentWord: boolean) => {
-    if (!roomSnapshot || !isHost || isResolvingSelection) {
+    if (!roomSnapshot || !isRoomHost || isResolvingSelection) {
       return;
     }
 
@@ -811,6 +816,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
       roomSnapshot.submissions,
       roomSnapshot.game.topic_round,
       roomSnapshot.game.current_cycle,
+      roomSnapshot.game.parent_player_id,
     );
 
     const selectedSubmission = selectedCurrentWord
@@ -853,7 +859,10 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
       }
 
       if (roomSnapshot.game.current_cycle < roomSnapshot.game.answer_cycles) {
-        const firstPlayer = getFirstAnsweringPlayer(roomSnapshot.players);
+        const firstPlayer = getFirstAnsweringPlayer(
+          roomSnapshot.players,
+          roomSnapshot.game.parent_player_id
+        );
 
         if (!firstPlayer) {
           throw new Error("次の周回で回答するプレイヤーが見つかりません。");
@@ -902,7 +911,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
   };
 
   const advanceToNextTopic = async () => {
-    if (!roomSnapshot || !isHost || isAdvancingTopic) {
+    if (!roomSnapshot || !isRoomHost || isAdvancingTopic) {
       return;
     }
 
@@ -950,7 +959,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
   };
 
   const finishGame = async () => {
-    if (!roomSnapshot || !isHost || isFinishingGame) {
+    if (!roomSnapshot || !isRoomHost || isFinishingGame) {
       return;
     }
 
@@ -1070,7 +1079,8 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
   }
 
   const snapshot = roomSnapshot;
-  const isHost = currentPlayer?.is_host ?? false;
+  const isRoomHost = currentPlayer?.is_host ?? false;
+  const isParent = snapshot.game.parent_player_id === currentPlayer?.id;
   const isCurrentPlayer = snapshot.game.current_player_id === playerId;
   const currentWord = snapshot.game.current_word ?? "まだ選ばれていません";
   const topicText = snapshot.topicText ?? "お題を読み込んでいます";
@@ -1104,7 +1114,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
   const canStart = snapshot.players.length >= 2;
 
   const showEndButton =
-    isHost &&
+    isRoomHost &&
     snapshot.game.status !== "waiting" &&
     snapshot.game.status !== "topic_result";
 
@@ -1113,7 +1123,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
       <WaitingRoomView
         roomCode={roomCode}
         players={snapshot.players}
-        isHost={isHost}
+        isHost={isRoomHost}
         canStart={canStart}
         isStarting={isStartingGame}
         copied={copied}
@@ -1150,7 +1160,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
         <FirstWordSelectView
           roomCode={roomCode}
           topicText={topicText}
-          isHost={isHost}
+          isHost={isParent}
           candidates={snapshot.firstWordCandidates}
           isSelecting={isSelectingFirstWord}
           errorMessage={errorMessage}
@@ -1179,7 +1189,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
           topicText={topicText}
           currentWord={currentWord}
           currentPlayerName={currentPlayerName}
-          isHost={isHost}
+          isHost={isParent}
           isCurrentPlayer={isCurrentPlayer}
           answerDraft={answerDraft}
           isSubmitting={isSubmittingAnswer}
@@ -1211,7 +1221,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
           currentWord={currentWord}
           submissionWord={currentRoundSubmission?.word ?? null}
           submissionPlayerName={currentSubmissionPlayerName}
-          isHost={isHost}
+          isHost={isRoomHost}
           errorMessage={errorMessage}
           isResolvingSelection={isResolvingSelection}
           onChooseCurrentWord={() => resolveHostSelection(true)}
@@ -1226,7 +1236,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
         roomCode={roomCode}
         topicText={roomSnapshot.topicText}
         finalWord={roomSnapshot.game.current_word ?? ""}
-        isHost={isHost}
+        isHost={isRoomHost}
         answerDraft={finalAnswerDraft}
         hasSubmitted={hasSubmittedFinalAnswer}
         submittedCount={finalSubmissions.length}
@@ -1246,7 +1256,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
         initialWord={roomSnapshot.game.initial_word ?? ""}
         finalWord={roomSnapshot.game.current_word ?? ""}
         finalSubmissions={finalSubmissions}
-        isHost={isHost}
+        isHost={isRoomHost}
         isSelecting={isSelectingFinalAnswer}
         errorMessage={errorMessage}
         onSelect={selectFinalAnswer}
@@ -1262,7 +1272,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
           initialWord={snapshot.game.initial_word ?? "未選択"}
           finalWord={snapshot.game.current_word ?? "未選択"}
           entries={topicResultEntries}
-          isHost={isHost}
+          isHost={isRoomHost}
           isProceeding={isAdvancingTopic || isFinishingGame}
           errorMessage={errorMessage}
           onNextTopic={advanceToNextTopic}

@@ -223,9 +223,10 @@ export const getNextUnansweredPlayer = (
   submissions: SubmissionRow[],
   topicRound: number,
   currentCycle: number,
+  parentPlayerId: string | null,
 ): PlayerRow | null => {
-  const childPlayers = [...players]
-    .filter((player) => !player.is_host)
+  const answeringPlayers = [...players]
+    .filter((player) => player.id !== parentPlayerId)
     .sort((left, right) => left.join_order - right.join_order);
 
   const answeredPlayerIds = new Set(
@@ -240,7 +241,9 @@ export const getNextUnansweredPlayer = (
   );
 
   return (
-    childPlayers.find((player) => !answeredPlayerIds.has(player.id)) ?? null
+    answeringPlayers.find(
+      (player) => !answeredPlayerIds.has(player.id),
+    ) ?? null
   );
 };
 
@@ -303,39 +306,43 @@ export const finishGame = () => ({
 
 export const getFirstAnsweringPlayer = (
   players: PlayerRow[],
+  parentPlayerId: string | null,
 ): PlayerRow | null => {
-  const nonHostPlayers = [...players]
-    .filter((player) => !player.is_host)
+  const answeringPlayers = [...players]
+    .filter((player) => player.id !== parentPlayerId)
     .sort((left, right) => left.join_order - right.join_order);
 
-  return nonHostPlayers[0] ?? null;
+  return answeringPlayers[0] ?? null;
 };
 
 export const getNextAnsweringPlayer = (
   players: PlayerRow[],
   currentPlayerId: string | null,
+  parentPlayerId: string | null,
 ): PlayerRow | null => {
-  const nonHostPlayers = [...players]
-    .filter((player) => !player.is_host)
+  const answeringPlayers = [...players]
+    .filter((player) => player.id !== parentPlayerId)
     .sort((left, right) => left.join_order - right.join_order);
 
-  if (nonHostPlayers.length === 0) {
+  if (answeringPlayers.length === 0) {
     return null;
   }
 
   if (!currentPlayerId) {
-    return nonHostPlayers[0] ?? null;
+    return answeringPlayers[0] ?? null;
   }
 
-  const currentIndex = nonHostPlayers.findIndex(
+  const currentIndex = answeringPlayers.findIndex(
     (player) => player.id === currentPlayerId,
   );
 
   if (currentIndex === -1) {
-    return nonHostPlayers[0] ?? null;
+    return answeringPlayers[0] ?? null;
   }
 
-  return nonHostPlayers[(currentIndex + 1) % nonHostPlayers.length] ?? null;
+  return answeringPlayers[
+    (currentIndex + 1) % answeringPlayers.length
+  ] ?? null;
 };
 
 export const findSubmissionForRound = (
