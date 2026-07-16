@@ -78,6 +78,17 @@ export default function WordocchiRoomPage() {
           );
         }
 
+        const { error: parentError } = await supabase
+          .from("games")
+          .update({
+            parent_player_id: player.id,
+          })
+          .eq("id", game.id);
+
+        if (parentError) {
+          throw new Error(parentError.message);
+        }
+
         savePlayerSession(player.id, game.room_code);
 
         router.push(`/wordocchi/online/${game.room_code}`);

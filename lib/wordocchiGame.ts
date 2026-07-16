@@ -52,6 +52,7 @@ export type GameRow = {
   initial_word: string | null;
   current_word: string | null;
   current_player_id: string | null;
+  parent_player_id: string | null;
   round_number: number;
   created_at: string;
   first_word_candidates: unknown;
