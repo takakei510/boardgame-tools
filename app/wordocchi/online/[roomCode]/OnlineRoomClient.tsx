@@ -63,6 +63,31 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
   const [isFinishingGame, setIsFinishingGame] = useState(false);
   const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
   const [answerDraft, setAnswerDraft] = useState("");
+  const [isUpdatingCycles, setIsUpdatingCycles] = useState(false);
+
+  const updateAnswerCycles = async (value: number) => {
+    if (!roomSnapshot || isUpdatingCycles) {
+      return;
+    }
+
+    const nextValue = Math.max(1, Math.min(5, value));
+
+    setIsUpdatingCycles(true);
+
+    const { error } = await supabase
+      .from("games")
+      .update({
+        answer_cycles: nextValue,
+      })
+      .eq("id", roomSnapshot.game.id)
+      .eq("status", "waiting");
+
+    if (error) {
+      console.error(error);
+    }
+
+    setIsUpdatingCycles(false);
+  };
 
   const clearAndLeave = useCallback(
     (target: string) => {
@@ -789,6 +814,13 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
         onCopyRoomCode={copyRoomCode}
         onStartGame={startGame}
         onLeaveRoom={leaveRoom}
+        onIncrease={() =>
+          updateAnswerCycles(roomSnapshot.game.answer_cycles + 1)
+        }
+        onDecrease={() =>
+        updateAnswerCycles(roomSnapshot.game.answer_cycles - 1)
+        }
+        isUpdatingCycles={isUpdatingCycles}
       />
     );
   }

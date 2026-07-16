@@ -12,6 +12,9 @@ type WaitingRoomViewProps = {
   onCopyRoomCode: () => void;
   onStartGame: () => void;
   onLeaveRoom: () => void;
+  onIncrease: () => void;
+  onDecrease: () => void;
+  isUpdatingCycles: boolean;
 };
 
 export default function WaitingRoomView({
@@ -26,6 +29,9 @@ export default function WaitingRoomView({
   onCopyRoomCode,
   onStartGame,
   onLeaveRoom,
+  onIncrease,
+  onDecrease,
+  isUpdatingCycles
 }: WaitingRoomViewProps) {
   const maxPlayers = 8;
 
@@ -110,7 +116,8 @@ export default function WaitingRoomView({
               <div className="mt-3 flex items-center justify-center gap-5">
                 <button
                   type="button"
-                  disabled
+                  onClick={onDecrease}
+                  disabled={answerCycles <= 1 || isUpdatingCycles}
                   className="h-11 w-11 rounded-xl border-2 border-orange-300 text-xl font-bold text-orange-400 disabled:cursor-not-allowed"
                 >
                   −
@@ -122,7 +129,8 @@ export default function WaitingRoomView({
 
                 <button
                   type="button"
-                  disabled
+                  onClick={onIncrease}
+                  disabled={isUpdatingCycles}
                   className="h-11 w-11 rounded-xl border-2 border-orange-300 text-xl font-bold text-orange-400 disabled:cursor-not-allowed"
                 >
                   ＋
