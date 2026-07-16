@@ -28,6 +28,7 @@ import HostSelectView from "./components/HostSelectView";
 import TopicResultView from "./components/TopicResultView";
 import FinishedView from "./components/FinishedView";
 import FinalAnswerView from "./components/FinalAnswerView";
+import FinalSelectView from "./components/FinalSelectView";
 
 type RoomSnapshot = {
   game: GameRow;
@@ -66,6 +67,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
   const [isUpdatingCycles, setIsUpdatingCycles] = useState(false);
   const [finalAnswerDraft, setFinalAnswerDraft] = useState("");
   const [isSubmittingFinalAnswer, setIsSubmittingFinalAnswer] = useState(false);
+  const [isSelectingFinalAnswer, setIsSelectingFinalAnswer] = useState(false);
 
   const updateAnswerCycles = async (value: number) => {
     if (!roomSnapshot || isUpdatingCycles) {
@@ -661,7 +663,59 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
       setIsSubmittingFinalAnswer(false);
     }
   };
+  const selectFinalAnswer = async (submission: SubmissionRow) => {
+    if (
+      !roomSnapshot ||
+      !isHost ||
+      roomSnapshot.game.status !== "final_select" ||
+      submission.answer_phase !== "final" ||
+      isSelectingFinalAnswer
+    ) {
+      return;
+    }
 
+    setIsSelectingFinalAnswer(true);
+    setErrorMessage("");
+
+    try {
+      const { error: submissionError } = await supabase
+        .from("submissions")
+        .update({
+          selected: true,
+        })
+        .eq("id", submission.id)
+        .eq("game_id", roomSnapshot.game.id)
+        .eq("topic_round", roomSnapshot.game.topic_round)
+        .eq("answer_phase", "final");
+
+      if (submissionError) {
+        throw new Error(submissionError.message);
+      }
+
+      const { error: gameError } = await supabase
+        .from("games")
+        .update({
+          status: "topic_result",
+          current_player_id: null,
+        })
+        .eq("id", roomSnapshot.game.id)
+        .eq("status", "final_select");
+
+      if (gameError) {
+        throw new Error(gameError.message);
+      }
+    } catch (error) {
+      console.error("最終回答選択エラー:", error);
+
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "最終回答の選択に失敗しました。",
+      );
+    } finally {
+      setIsSelectingFinalAnswer(false);
+    }
+  };
   const resolveHostSelection = async (selectedCurrentWord: boolean) => {
     if (!roomSnapshot || !isHost || isResolvingSelection) {
       return;
@@ -1096,6 +1150,21 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
         errorMessage={errorMessage}
         onAnswerChange={setFinalAnswerDraft}
         onSubmit={submitFinalAnswer}
+      />
+    );
+  }
+  if (roomSnapshot.game.status === "final_select") {
+    return (
+      <FinalSelectView
+        roomCode={roomCode}
+        topicText={roomSnapshot.topicText}
+        initialWord={roomSnapshot.game.initial_word ?? ""}
+        finalWord={roomSnapshot.game.current_word ?? ""}
+        finalSubmissions={finalSubmissions}
+        isHost={isHost}
+        isSelecting={isSelectingFinalAnswer}
+        errorMessage={errorMessage}
+        onSelect={selectFinalAnswer}
       />
     );
   }
