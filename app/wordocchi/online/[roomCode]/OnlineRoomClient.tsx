@@ -215,7 +215,7 @@ export default function OnlineRoomClient({ roomCode }: OnlineRoomClientProps) {
 
       const { data: players, error: playersError } = await supabase
         .from("players")
-        .select("id, game_id, name, is_host, join_order, connected, parent_player_id")
+        .select("id, game_id, name, is_host, join_order, connected")
         .eq("game_id", game.id)
         .order("join_order", { ascending: true });
 
